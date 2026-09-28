@@ -1,0 +1,76 @@
+# Environment — NEVER commit any of these
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+*.env
+
+# Node / pnpm
+node_modules/
+.turbo/
+dist/
+build/
+out/
+.next/
+*.tsbuildinfo
+coverage/
+
+# Vercel
+.vercel
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Python (legacy, remove after full migration to TS)
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+*.egg
+.eggs/
+.venv/
+venv/
+env/
+.uv/
+.mypy_cache/
+.pytype/
+.ruff_cache/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+src/db/migrations/versions/__pycache__/
+
+# Secrets — NEVER commit these
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+.claude/
+.snapshots/
+docs/
+plan.md
+tasks/
+.council/
+# LanceDB prototype experiment data (Stage 0)
+.proto_db/
+proto/.proto_db_config.json
+
+# Production RAG index
+.rag/
