@@ -55,7 +55,7 @@ def run_ingest() -> None:
         max_chars: int = cfg["max_chars"]
         table_name: str = cfg["table"]
 
-        print(f"\n[ingest] config: model={model}  max_chars={max_chars}  table={table_name}")
+        print(f"\n[ingest] config: model={model}  max_chars={max_chars}  table={table_name}", flush=True)
 
         try:
             from llama_index.core import SimpleDirectoryReader, VectorStoreIndex
@@ -107,8 +107,7 @@ def run_ingest() -> None:
             print(
                 f"[ingest] ERROR — missing dependency: {exc}\n"
                 f"         Run: pip install -r proto/requirements.txt",
-                file=sys.stderr,
-            )
+                file=sys.stderr, flush=True)
             continue
 
         except Exception as exc:
@@ -119,13 +118,11 @@ def run_ingest() -> None:
                     f"         Ensure Ollama is running: ollama serve\n"
                     f"         And the model is pulled:  ollama pull {model}\n"
                     f"         Original error: {exc}",
-                    file=sys.stderr,
-                )
+                    file=sys.stderr, flush=True)
             else:
                 print(
                     f"[ingest] ERROR — config model={model} max_chars={max_chars}: {exc}",
-                    file=sys.stderr,
-                )
+                    file=sys.stderr, flush=True)
             continue
 
     config_snapshot = {

@@ -1,0 +1,46 @@
+import type { ScoredChunk, ChatTurn } from '../types/index.js'
+
+// rough token estimate: 4 chars per token
+export function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4)
+}
+
+export function allocateBudget(
+  numCtx: number,
+  contextFraction: number,
+  historyFraction: number,
+): { contextTokens: number; historyTokens: number } {
+  return {
+    contextTokens: Math.floor(numCtx * contextFraction),
+    historyTokens: Math.floor(numCtx * historyFraction),
+  }
+}
+
+export function trimContext(chunks: ScoredChunk[], maxTokens: number): ScoredChunk[] {
+  let used = 0
+  const result: ScoredChunk[] = []
+  // sort by score descending, keep highest-scored chunks first
+  const sorted = [...chunks].sort((a, b) => b.score - a.score)
+  for (const c of sorted) {
+    const t = estimateTokens(c.chunk.header + c.chunk.content)
+    if (used + t > maxTokens) break
+    result.push(c)
+    used += t
+  }
+  return result
+}
+
+export function trimHistory(history: ChatTurn[], maxTokens: number): ChatTurn[] {
+  let used = 0
+  const result: ChatTurn[] = []
+  // keep most recent turns
+  for (let i = history.length - 1; i >= 0; i--) {
+    const turn = history[i]
+    if (turn === undefined) continue
+    const t = estimateTokens(turn.content)
+    if (used + t > maxTokens) break
+    result.unshift(turn)
+    used += t
+  }
+  return result
+}

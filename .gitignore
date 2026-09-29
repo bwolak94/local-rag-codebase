@@ -67,6 +67,8 @@ secrets/
 docs/
 plan.md
 tasks/
+task/
+rekrut/
 .council/
 # LanceDB prototype experiment data (Stage 0)
 .proto_db/
