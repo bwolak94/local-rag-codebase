@@ -1,0 +1,58 @@
+import { Command } from 'commander'
+import chokidar from 'chokidar'
+import { resolve, relative } from 'node:path'
+import { loadConfig } from '../config/loader.js'
+import { OllamaEmbedder } from '../embedding/ollama.js'
+import { LanceDBStore } from '../store/lancedb.js'
+import { IndexPipeline } from '../ingest/pipeline.js'
+
+export function register(program: Command) {
+  program
+    .command('watch')
+    .description('Continuously index the repository on file changes')
+    .option('--config <path>', 'Path to .ragconfig.json')
+    .action(async (opts) => {
+      const config = loadConfig({}, opts.config)
+      const store = new LanceDBStore(config.store.path, config.root, config.embedding.model)
+      const embedder = new OllamaEmbedder(config.embedding.model, config.embedding.batchSize)
+      const pipeline = new IndexPipeline(config, store, embedder)
+
+      // initial full incremental index
+      console.log('[watch] Initial indexing...')
+      const result = await pipeline.run()
+      console.log(`[watch] ${result.scanned} files scanned, ${result.chunks} chunks indexed`)
+
+      // set up watcher
+      const pending = new Set<string>()
+      let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+      const flush = async () => {
+        const paths = [...pending].map(abs => relative(config.root, abs))
+        pending.clear()
+        for (const p of paths) console.log(`[watch] ${p} changed`)
+        const r = await pipeline.run({ paths })
+        console.log(`[watch] ${r.chunks} chunks reindexed in ${(r.elapsed / 1000).toFixed(1)}s`)
+        if (r.scanned === 0 && paths.length > 0) {
+          console.log('[watch] note: some changed paths are not yet tracked by git (run git add to index them)')
+        }
+      }
+
+      const schedule = (path: string) => {
+        pending.add(path)
+        if (debounceTimer) clearTimeout(debounceTimer)
+        debounceTimer = setTimeout(() => { void flush() }, 500)
+      }
+
+      chokidar
+        .watch(resolve(config.root), {
+          ignored: /(node_modules|\.git|\.rag|dist)/,
+          ignoreInitial: true,
+          persistent: true,
+        })
+        .on('add', schedule)
+        .on('change', schedule)
+        .on('unlink', schedule)
+
+      console.log('[watch] Watching for changes. Ctrl+C to stop.')
+    })
+}
