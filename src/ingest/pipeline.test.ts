@@ -18,6 +18,7 @@ const mockStore = (): Store => ({
   vectorSearch: vi.fn().mockResolvedValue([]),
   textSearch: vi.fn().mockResolvedValue([]),
   getMeta: vi.fn().mockResolvedValue(null),
+  getByIds: vi.fn().mockResolvedValue([]),
 })
 
 // mock embedder

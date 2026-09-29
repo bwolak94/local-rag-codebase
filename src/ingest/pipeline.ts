@@ -3,7 +3,10 @@ import { mkdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { collectFiles } from './walker.js'
 import { TreeSitterChunker } from '../chunking/treesitter.js'
+import { getParser } from '../chunking/treesitter.js'
 import { SlidingWindowChunker } from '../chunking/fallback.js'
+import { SQLiteSymbolIndex } from '../symbols/index.js'
+import { extractSymbols } from '../symbols/extractor.js'
 import type { Embedder, Store, EmbeddedChunk } from '../types/index.js'
 import type { RagConfig } from '../config/schema.js'
 
@@ -15,6 +18,7 @@ interface FileRecord {
 
 export class IndexPipeline {
   private db: Database.Database
+  readonly symbolIndex: SQLiteSymbolIndex
 
   constructor(
     private config: RagConfig,
@@ -32,6 +36,7 @@ export class IndexPipeline {
         indexedAt INTEGER NOT NULL
       )
     `)
+    this.symbolIndex = new SQLiteSymbolIndex(config.store.path, config.root)
   }
 
   private getRecord(path: string): FileRecord | undefined {
@@ -71,6 +76,7 @@ export class IndexPipeline {
       const oldPaths = this.getAllPaths()
       for (const p of oldPaths) {
         await this.store.deleteByPath(p)
+        await this.symbolIndex.deleteByPath(p)
       }
       this.db.exec('DELETE FROM files')
     }
@@ -109,6 +115,7 @@ export class IndexPipeline {
       }
 
       await this.store.deleteByPath(file.path)
+      await this.symbolIndex.deleteByPath(file.path)
 
       const chunker = tsChunker.supports(file) ? tsChunker : fallback
       const chunks = await chunker.chunk(file)
@@ -125,6 +132,21 @@ export class IndexPipeline {
       }
       const embedded: EmbeddedChunk[] = chunks.map((c, i) => ({ ...c, vector: vectors[i]! }))
       await this.store.upsert(embedded)
+
+      // Extract symbols and update symbol index.
+      // Pass the chunks array so the extractor can resolve chunk IDs by line
+      // overlap instead of recomputing them (which diverges for split chunks).
+      const parser = await getParser(file.lang)
+      if (parser) {
+        try {
+          const tree = parser.parse(file.content)
+          const { defs, refs } = await extractSymbols(file, tree, chunks)
+          await this.symbolIndex.upsert(defs, refs)
+        } catch {
+          // symbol extraction is best-effort — don't fail the whole pipeline
+        }
+      }
+
       this.upsertRecord(file.path, file.hash)
       totalChunks += embedded.length
     }
@@ -135,6 +157,7 @@ export class IndexPipeline {
     for (const p of indexedPaths) {
       if (!currentPaths.has(p)) {
         await this.store.deleteByPath(p)
+        await this.symbolIndex.deleteByPath(p)
         this.deleteRecord(p)
         deleted++
       }

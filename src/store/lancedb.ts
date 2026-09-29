@@ -146,6 +146,25 @@ export class LanceDBStore implements Store {
       return []
     }
   }
+
+  async getByIds(ids: string[]): Promise<ScoredChunk[]> {
+    if (ids.length === 0) return []
+    try {
+      const db = await this.connect()
+      const names = await db.tableNames()
+      if (!names.includes(CHUNKS_TABLE)) return []
+      const tbl = await db.openTable(CHUNKS_TABLE)
+      const escaped = ids.map(id => `'${id.replace(/'/g, "''")}'`).join(', ')
+      const rows = await tbl.query().where(`id IN (${escaped})`).toArray()
+      return rows.map(r => ({
+        chunk: rowToChunk(r),
+        score: 1,
+        source: 'expanded' as const,
+      }))
+    } catch {
+      return []
+    }
+  }
 }
 
 function rowToChunk(r: Record<string, unknown>): import('../types/index.js').Chunk {

@@ -28,3 +28,13 @@
 {"q": "Where is the Embedder interface defined?", "expected": ["src/types/index.ts"], "tags": ["identifier"]}
 {"q": "How does the TreeSitterChunker fall back when no symbols are found?", "expected": ["src/chunking/treesitter.ts"], "tags": ["semantic"]}
 {"q": "Where is findConfigFile defined?", "expected": ["src/config/loader.ts"], "tags": ["identifier"]}
+{"q": "How does the IndexPipeline use the Store interface to persist embedded chunks?", "expected": ["src/ingest/pipeline.ts", "src/store/lancedb.ts"], "tags": ["semantic", "cross-file"]}
+{"q": "What calls HybridRetriever.retrieve and how does it pass the query options?", "expected": ["src/cli/ask.ts", "src/retrieval/hybrid.ts"], "tags": ["identifier", "cross-file"]}
+{"q": "How does the chunkId function in hasher.ts get used by the TreeSitterChunker?", "expected": ["src/ingest/hasher.ts", "src/chunking/treesitter.ts"], "tags": ["semantic", "cross-file"]}
+{"q": "How does the RagConfig schema drive the retrieval parameters used by HybridRetriever?", "expected": ["src/config/schema.ts", "src/retrieval/hybrid.ts", "src/cli/ask.ts"], "tags": ["semantic", "cross-file"]}
+{"q": "How does the SQLiteSymbolIndex neighbors method relate to expandChunks in expand.ts?", "expected": ["src/symbols/index.ts", "src/symbols/expand.ts"], "tags": ["semantic", "cross-file"]}
+{"q": "Where is extractSymbols called in the pipeline and what does it receive?", "expected": ["src/ingest/pipeline.ts", "src/symbols/extractor.ts"], "tags": ["identifier", "cross-file"]}
+{"q": "How does estimateTokens from budget.ts control which neighbor chunks are added during expansion?", "expected": ["src/generation/budget.ts", "src/symbols/expand.ts"], "tags": ["semantic", "cross-file"]}
+{"q": "How does the Store interface getByIds method get implemented in LanceDBStore?", "expected": ["src/types/index.ts", "src/store/lancedb.ts"], "tags": ["semantic", "cross-file"]}
+{"q": "How does the getParser function exported from treesitter.ts get reused by extractor.ts?", "expected": ["src/chunking/treesitter.ts", "src/symbols/extractor.ts"], "tags": ["semantic", "cross-file"]}
+{"q": "How does the walker.ts collectFiles result feed into the IndexPipeline and ultimately into the SymbolIndex?", "expected": ["src/ingest/walker.ts", "src/ingest/pipeline.ts", "src/symbols/index.ts"], "tags": ["semantic", "cross-file"]}
