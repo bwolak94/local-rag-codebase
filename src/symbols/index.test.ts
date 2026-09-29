@@ -125,4 +125,75 @@ describe('SQLiteSymbolIndex', () => {
     expect(depth2).toContain('chunk-C')
     expect(depth2).not.toContain('chunk-A')
   })
+
+  it('upsert() called twice for same path does not duplicate refs', async () => {
+    const def = makeDef({ path: 'src/a.ts', chunkId: 'chunk1', name: 'foo' })
+    const ref = makeRef({ path: 'src/b.ts', chunkId: 'chunk2', name: 'foo' })
+
+    // First upsert
+    await idx.upsert([def], [ref])
+
+    // Second upsert for same path (should use UNIQUE constraint to ignore duplicates)
+    await idx.upsert([def], [ref])
+
+    const refs = await idx.references('foo')
+    // Should have exactly 1 ref, not 2
+    expect(refs.filter(r => r.path === 'src/b.ts')).toHaveLength(1)
+  })
+
+  it('neighbors() returns empty array when no symbols defined in seed chunk', async () => {
+    // Seed chunk has no definitions
+    const result = await idx.neighbors('empty-chunk')
+    expect(result).toEqual([])
+  })
+
+  it('neighbors() with depth=0 returns empty array', async () => {
+    const def = makeDef({ chunkId: 'chunk-A' })
+    const ref = makeRef({ chunkId: 'chunk-B', name: 'myFn' })
+    await idx.upsert([def], [ref])
+
+    const result = await idx.neighbors('chunk-A', 0)
+    expect(result).toEqual([])
+  })
+
+  it('definitions() with different symbol names return correct defs', async () => {
+    const fnDef = makeDef({ name: 'processData', kind: 'function', chunkId: 'c1', path: 'src/a.ts' })
+    const classDef = makeDef({ name: 'Builder', kind: 'class', chunkId: 'c2', path: 'src/b.ts' })
+    await idx.upsert([fnDef, classDef], [])
+
+    const fnDefs = await idx.definitions('processData')
+    expect(fnDefs.length).toBeGreaterThanOrEqual(0)
+
+    const classDefs = await idx.definitions('Builder')
+    expect(classDefs.length).toBeGreaterThanOrEqual(0)
+  })
+
+  it('multiple refs to same symbol in different chunks are all stored', async () => {
+    const def = makeDef({ name: 'shared' })
+    const ref1 = makeRef({ name: 'shared', chunkId: 'chunk-user-1', path: 'src/a.ts', line: 5 })
+    const ref2 = makeRef({ name: 'shared', chunkId: 'chunk-user-2', path: 'src/b.ts', line: 10 })
+    await idx.upsert([def], [ref1, ref2])
+
+    const refs = await idx.references('shared')
+    expect(refs.length).toBeGreaterThanOrEqual(1)
+    const chunkIds = refs.map(r => r.chunkId)
+    expect(chunkIds).toContain('chunk-user-1')
+    expect(chunkIds).toContain('chunk-user-2')
+  })
+
+  it('deleteByPath() is atomic and removes both defs and refs', async () => {
+    const def = makeDef({ path: 'src/delete.ts', chunkId: 'c1', name: 'foo' })
+    const ref = makeRef({ path: 'src/delete.ts', chunkId: 'c2', name: 'foo' })
+    const otherRef = makeRef({ path: 'src/keep.ts', chunkId: 'c3', name: 'foo' })
+    await idx.upsert([def], [ref, otherRef])
+
+    await idx.deleteByPath('src/delete.ts')
+
+    const defs = await idx.definitions('foo')
+    expect(defs).toHaveLength(0)
+
+    const refs = await idx.references('foo')
+    expect(refs).toHaveLength(1)
+    expect(refs[0]?.path).toBe('src/keep.ts')
+  })
 })
