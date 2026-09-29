@@ -15,7 +15,7 @@ export function register(program: Command) {
     .action(async (question: string, opts) => {
       const config = loadConfig({}, opts.config)
       const embedder = new OllamaEmbedder(config.embedding.model, config.embedding.batchSize)
-      const store = new LanceDBStore(config.store.path, config.root)
+      const store = new LanceDBStore(config.store.path, config.root, config.embedding.model)
       const retriever = new HybridRetriever(store, embedder, config.retrieval.kVector, config.retrieval.kFts)
       const generator = new OllamaGenerator(config)
 

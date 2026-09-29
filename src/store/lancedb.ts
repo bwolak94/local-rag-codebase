@@ -16,7 +16,7 @@ export class LanceDBStore implements Store {
   private dbPath: string
   private db: lancedb.Connection | null = null
 
-  constructor(storePath: string, root: string) {
+  constructor(storePath: string, root: string, private embedModel: string) {
     this.dbPath = resolve(root, storePath)
   }
 
@@ -86,7 +86,7 @@ export class LanceDBStore implements Store {
       const dim = firstChunk.vector.length
       const meta = await this.getMeta()
       if (!meta) {
-        await this.setMeta('unknown', dim)
+        await this.setMeta(this.embedModel, dim)
       }
     }
   }
@@ -111,7 +111,8 @@ export class LanceDBStore implements Store {
       const tbl = await db.openTable(CHUNKS_TABLE)
       let q = tbl.vectorSearch(vector).limit(k)
       if (filter?.pathPrefix) {
-        q = q.where(`path LIKE '${filter.pathPrefix}%'`)
+        const safePrefix = filter.pathPrefix.replace(/'/g, "''")
+        q = q.where(`path LIKE '${safePrefix}%'`)
       }
       const rows = await q.toArray()
       return rows.map(r => ({
@@ -132,7 +133,8 @@ export class LanceDBStore implements Store {
       const tbl = await db.openTable(CHUNKS_TABLE)
       let q = tbl.search(query).limit(k)
       if (filter?.pathPrefix) {
-        q = q.where(`path LIKE '${filter.pathPrefix}%'`)
+        const safePrefix = filter.pathPrefix.replace(/'/g, "''")
+        q = q.where(`path LIKE '${safePrefix}%'`)
       }
       const rows = await q.toArray()
       return rows.map(r => ({

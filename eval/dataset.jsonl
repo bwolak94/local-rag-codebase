@@ -1,0 +1,30 @@
+{"q": "How does the rrf function calculate scores?", "expected": ["src/retrieval/rrf.ts"], "tags": ["semantic"]}
+{"q": "Where is chunkId defined?", "expected": ["src/ingest/hasher.ts"], "tags": ["identifier"]}
+{"q": "How does the sliding window chunker split files?", "expected": ["src/chunking/fallback.ts"], "tags": ["semantic"]}
+{"q": "Where is ModelMismatchError defined?", "expected": ["src/store/lancedb.ts"], "tags": ["identifier"]}
+{"q": "How does HybridRetriever combine vector and full-text search results?", "expected": ["src/retrieval/hybrid.ts"], "tags": ["semantic"]}
+{"q": "Where is contentHash defined?", "expected": ["src/ingest/hasher.ts"], "tags": ["identifier"]}
+{"q": "How does the TreeSitterChunker handle files that are too large?", "expected": ["src/chunking/treesitter.ts"], "tags": ["semantic"]}
+{"q": "Where is OllamaEmbedder defined?", "expected": ["src/embedding/ollama.ts"], "tags": ["identifier"]}
+{"q": "How does the LanceDBStore perform vector similarity search?", "expected": ["src/store/lancedb.ts"], "tags": ["semantic"]}
+{"q": "Where is collectFiles defined?", "expected": ["src/ingest/walker.ts"], "tags": ["identifier"]}
+{"q": "How does the IndexPipeline track which files have already been indexed?", "expected": ["src/ingest/pipeline.ts"], "tags": ["semantic"]}
+{"q": "Where is SlidingWindowChunker defined?", "expected": ["src/chunking/fallback.ts"], "tags": ["identifier"]}
+{"q": "How does the watch command debounce file system events?", "expected": ["src/cli/watch.ts"], "tags": ["semantic"]}
+{"q": "Where is loadConfig defined?", "expected": ["src/config/loader.ts"], "tags": ["identifier"]}
+{"q": "How does the pipeline handle deleted files that are no longer present?", "expected": ["src/ingest/pipeline.ts"], "tags": ["semantic"]}
+{"q": "Where is RagConfigSchema defined?", "expected": ["src/config/schema.ts"], "tags": ["identifier"]}
+{"q": "What query language patterns does the TreeSitterChunker use for TypeScript?", "expected": ["src/chunking/treesitter.ts"], "tags": ["semantic"]}
+{"q": "Where is chunkHash defined?", "expected": ["src/ingest/hasher.ts"], "tags": ["identifier"]}
+{"q": "How does the OllamaEmbedder handle batch processing of texts?", "expected": ["src/embedding/ollama.ts"], "tags": ["semantic"]}
+{"q": "Where is IndexPipeline defined?", "expected": ["src/ingest/pipeline.ts"], "tags": ["identifier"]}
+{"q": "How does the walker exclude secret files like .env and .pem?", "expected": ["src/ingest/walker.ts"], "tags": ["semantic"]}
+{"q": "Where is HybridRetriever defined?", "expected": ["src/retrieval/hybrid.ts"], "tags": ["identifier"]}
+{"q": "How does the LanceDBStore upsert chunks avoiding duplicates?", "expected": ["src/store/lancedb.ts"], "tags": ["semantic"]}
+{"q": "Where is detectLang defined?", "expected": ["src/ingest/walker.ts"], "tags": ["identifier"]}
+{"q": "How does the index command guard against embedding model mismatches?", "expected": ["src/cli/index-cmd.ts"], "tags": ["semantic"]}
+{"q": "Where is the Store interface defined?", "expected": ["src/types/index.ts"], "tags": ["identifier"]}
+{"q": "How are query prefixes handled differently from document prefixes in the embedder?", "expected": ["src/embedding/ollama.ts"], "tags": ["semantic"]}
+{"q": "Where is the Embedder interface defined?", "expected": ["src/types/index.ts"], "tags": ["identifier"]}
+{"q": "How does the TreeSitterChunker fall back when no symbols are found?", "expected": ["src/chunking/treesitter.ts"], "tags": ["semantic"]}
+{"q": "Where is findConfigFile defined?", "expected": ["src/config/loader.ts"], "tags": ["identifier"]}
