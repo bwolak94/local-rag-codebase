@@ -74,6 +74,7 @@ export interface Store {
   vectorSearch(vector: number[], k: number, filter?: SearchFilter): Promise<ScoredChunk[]>
   textSearch(query: string, k: number, filter?: SearchFilter): Promise<ScoredChunk[]>
   getMeta(): Promise<{ embedModel: string; dim: number } | null>
+  getByIds(ids: string[]): Promise<ScoredChunk[]>
 }
 
 export interface SymbolIndex {

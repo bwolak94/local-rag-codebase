@@ -1,5 +1,6 @@
 import { rrf } from './rrf.js'
-import type { Retriever, ScoredChunk, SearchFilter, Store, Embedder } from '../types/index.js'
+import { expandChunks } from '../symbols/expand.js'
+import type { Retriever, ScoredChunk, SearchFilter, Store, Embedder, SymbolIndex } from '../types/index.js'
 
 export class HybridRetriever implements Retriever {
   constructor(
@@ -7,6 +8,9 @@ export class HybridRetriever implements Retriever {
     private embedder: Embedder,
     private kVector: number,
     private kFts: number,
+    private symbolIndex?: SymbolIndex,
+    private expandMaxTokens?: number,
+    private expandDepth: number = 1,
   ) {}
 
   async retrieve(
@@ -20,6 +24,13 @@ export class HybridRetriever implements Retriever {
     ])
 
     const fused = rrf([vectorResults, ftsResults])
-    return fused.slice(0, opts.k)
+    const top = fused.slice(0, opts.k)
+
+    if (opts.expand && this.symbolIndex) {
+      const maxTokens = this.expandMaxTokens ?? 4096
+      return expandChunks(top, this.symbolIndex, this.store, maxTokens, this.expandDepth)
+    }
+
+    return top
   }
 }

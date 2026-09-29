@@ -46,7 +46,7 @@ const QUERIES: Record<string, string> = {
 let parserInitialized = false
 const parsers = new Map<string, Parser>()
 
-async function getParser(lang: string): Promise<Parser | null> {
+export async function getParser(lang: string): Promise<Parser | null> {
   if (!SUPPORTED_LANGS.has(lang)) return null
 
   if (parsers.has(lang)) return parsers.get(lang)!
