@@ -149,6 +149,13 @@ describe('loadConfig', () => {
     expect(result.root).toBe('/absolute/path')
   })
 
+  it('relative root in overrides is resolved against process.cwd()', () => {
+    const configPath = join(tmpDir, '.ragconfig.json')
+    writeFileSync(configPath, '{}')
+    const result = loadConfig({ root: '.' }, configPath)
+    expect(result.root).toBe(process.cwd())
+  })
+
   it('merges nested objects (overrides replace entire nested object)', () => {
     const configPath = join(tmpDir, '.ragconfig.json')
     writeFileSync(configPath, JSON.stringify({

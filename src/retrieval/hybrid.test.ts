@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { HybridRetriever } from './hybrid.js'
 import type { Store, Embedder, SymbolIndex, ScoredChunk } from '../types/index.js'
+import type { RagConfig } from '../config/schema.js'
 
 vi.mock('./rrf.js', () => ({
   rrf: vi.fn((lists: ScoredChunk[][]) => {
@@ -23,6 +24,20 @@ vi.mock('../symbols/expand.js', () => ({
     Promise.resolve(chunks)
   ),
 }))
+
+vi.mock('./rewrite.js', () => ({
+  expandQuery: vi.fn().mockResolvedValue('snippet'),
+}))
+
+vi.mock('./rerank.js', () => ({
+  rerank: vi.fn((
+    _query: string,
+    chunks: ScoredChunk[],
+  ) => Promise.resolve(chunks)),
+}))
+
+import { expandQuery } from './rewrite.js'
+import { rerank } from './rerank.js'
 
 function makeChunk(id: string, score: number): ScoredChunk {
   return {
@@ -235,5 +250,82 @@ describe('HybridRetriever', () => {
       expect.any(Number),
       2 // expandDepth=2
     )
+  })
+
+  // ── HyDE / rewrite tests ──────────────────────────────────────────────────
+
+  function makeFullConfig(retrieval: Partial<RagConfig['retrieval']> = {}): RagConfig {
+    return {
+      root: '.',
+      include: ['src/**'],
+      exclude: [],
+      maxFileBytes: 200_000,
+      embedding: { model: 'nomic-embed-text', batchSize: 48 },
+      llm: {
+        model: 'qwen2.5-coder:14b',
+        host: 'http://localhost:11434',
+        numCtx: 32768,
+        temperature: 0.1,
+        rewriteTemperature: 0.3,
+      },
+      retrieval: {
+        kVector: 20,
+        kFts: 20,
+        kFinal: 8,
+        expandDepth: 1,
+        rewrite: false,
+        rerank: 'false',
+        ...retrieval,
+      },
+      store: { driver: 'lancedb', path: '.rag' },
+      budget: { contextFraction: 0.6, historyFraction: 0.2 },
+    } as RagConfig
+  }
+
+  it('when config.retrieval.rewrite is true, calls expandQuery and performs additional vector search', async () => {
+    const expandQueryMock = vi.mocked(expandQuery)
+    expandQueryMock.mockResolvedValue('hypothetical snippet')
+
+    const vectorResult = makeChunk('v1', 0.9)
+    vi.mocked(store.vectorSearch).mockResolvedValue([vectorResult])
+    vi.mocked(store.textSearch).mockResolvedValue([])
+
+    const config = makeFullConfig({ rewrite: true, rerank: 'false' })
+    const retriever = new HybridRetriever(store, embedder, 20, 20, undefined, undefined, 1, config)
+    await retriever.retrieve('test query', { k: 8 })
+
+    expect(expandQueryMock).toHaveBeenCalled()
+    // vectorSearch called at least twice: once for original query, once for HyDE snippet
+    expect(vi.mocked(store.vectorSearch).mock.calls.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('when config.retrieval.rewrite is true but expandQuery throws, falls back to 2-list RRF without error', async () => {
+    const expandQueryMock = vi.mocked(expandQuery)
+    expandQueryMock.mockRejectedValue(new Error('network error'))
+
+    vi.mocked(store.vectorSearch).mockResolvedValue([makeChunk('v1', 0.9)])
+    vi.mocked(store.textSearch).mockResolvedValue([makeChunk('t1', 0.8)])
+
+    const config = makeFullConfig({ rewrite: true, rerank: 'false' })
+    const retriever = new HybridRetriever(store, embedder, 20, 20, undefined, undefined, 1, config)
+
+    // Should NOT throw
+    const result = await retriever.retrieve('test query', { k: 8 })
+    expect(Array.isArray(result)).toBe(true)
+  })
+
+  it('when config.retrieval.rerank is not false, calls rerank', async () => {
+    const rerankMock = vi.mocked(rerank)
+    rerankMock.mockClear()
+    rerankMock.mockImplementation((_q, chunks) => Promise.resolve(chunks))
+
+    vi.mocked(store.vectorSearch).mockResolvedValue([makeChunk('r1', 0.9)])
+    vi.mocked(store.textSearch).mockResolvedValue([])
+
+    const config = makeFullConfig({ rerank: 'llm', rewrite: false })
+    const retriever = new HybridRetriever(store, embedder, 20, 20, undefined, undefined, 1, config)
+    await retriever.retrieve('test query', { k: 8 })
+
+    expect(rerankMock).toHaveBeenCalled()
   })
 })

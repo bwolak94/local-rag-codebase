@@ -45,6 +45,7 @@ function makeConfig(rerank: 'false' | 'llm' | 'cross-encoder' = 'false'): RagCon
     embedding: { model: 'nomic-embed-text', batchSize: 48 },
     llm: {
       model: 'qwen2.5-coder:14b',
+      host: 'http://localhost:11434',
       numCtx: 32768,
       temperature: 0.1,
       rewriteTemperature: 0.3,

@@ -178,7 +178,10 @@ async function main() {
   console.log(`\nResults written to: eval/results/${timestamp}.json`)
 }
 
-main().catch(err => {
-  console.error(err)
-  process.exit(1)
-})
+// Only run main() when this file is executed directly, not when imported by tests
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch(err => {
+    console.error(err)
+    process.exit(1)
+  })
+}

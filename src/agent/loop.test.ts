@@ -28,6 +28,7 @@ function makeConfig(overrides: Partial<RagConfig['llm']> = {}): RagConfig {
     embedding: { model: 'nomic-embed-text', batchSize: 48 },
     llm: {
       model: 'qwen2.5-coder:14b',
+      host: 'http://localhost:11434',
       numCtx: 32768,
       temperature: 0.1,
       rewriteTemperature: 0.3,

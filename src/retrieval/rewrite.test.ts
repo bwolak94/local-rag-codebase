@@ -101,6 +101,19 @@ describe('condensQuestion', () => {
     const callArgs = mockGenerate.mock.calls[0]?.[0]
     expect(callArgs.stream).toBe(false)
   })
+
+  it('falls back to followUp when generate throws', async () => {
+    mockGenerate.mockRejectedValue(new Error('network error'))
+
+    const history: ChatTurn[] = [
+      { role: 'user', content: 'previous question' },
+      { role: 'assistant', content: 'previous answer' },
+    ]
+    const followUp = 'my follow-up question'
+    const result = await condensQuestion(history, followUp, 'model', 32768)
+
+    expect(result).toBe(followUp)
+  })
 })
 
 describe('expandQuery', () => {

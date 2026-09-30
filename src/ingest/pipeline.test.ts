@@ -39,7 +39,7 @@ function testConfig(root: string): RagConfig {
     exclude: [],
     maxFileBytes: 200_000,
     embedding: { model: 'nomic-embed-text', batchSize: 48 },
-    llm: { model: 'qwen2.5-coder:14b', numCtx: 32768, temperature: 0.1, rewriteTemperature: 0.3 },
+    llm: { model: 'qwen2.5-coder:14b', host: 'http://localhost:11434', numCtx: 32768, temperature: 0.1, rewriteTemperature: 0.3 },
     retrieval: { kVector: 20, kFts: 20, kFinal: 8, expandDepth: 1, rewrite: false, rerank: 'false' },
     store: { driver: 'lancedb', path: '.rag-test' },
     budget: { contextFraction: 0.6, historyFraction: 0.2 },
