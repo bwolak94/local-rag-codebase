@@ -38,3 +38,13 @@
 {"q": "How does the Store interface getByIds method get implemented in LanceDBStore?", "expected": ["src/types/index.ts", "src/store/lancedb.ts"], "tags": ["semantic", "cross-file"]}
 {"q": "How does the getParser function exported from treesitter.ts get reused by extractor.ts?", "expected": ["src/chunking/treesitter.ts", "src/symbols/extractor.ts"], "tags": ["semantic", "cross-file"]}
 {"q": "How does the walker.ts collectFiles result feed into the IndexPipeline and ultimately into the SymbolIndex?", "expected": ["src/ingest/walker.ts", "src/ingest/pipeline.ts", "src/symbols/index.ts"], "tags": ["semantic", "cross-file"]}
+{"q": "Trace the full path from rag ask CLI to the Ollama embedding call", "expected": ["src/cli/ask.ts", "src/embedding/ollama.ts"], "tags": ["semantic", "multi-hop"]}
+{"q": "What happens when --full flag is passed to rag index?", "expected": ["src/cli/index-cmd.ts", "src/ingest/pipeline.ts"], "tags": ["semantic", "multi-hop"]}
+{"q": "How does the agentLoop dispatch a tool call and what Zod schemas guard the inputs?", "expected": ["src/agent/loop.ts", "src/agent/tools.ts"], "tags": ["semantic", "multi-hop"]}
+{"q": "How does the rerank function decide which reranker to use and where is the rerank config option defined?", "expected": ["src/retrieval/rerank.ts", "src/config/schema.ts"], "tags": ["semantic", "multi-hop"]}
+{"q": "How does the HybridRetriever use the config to conditionally invoke reranking after RRF fusion?", "expected": ["src/retrieval/hybrid.ts", "src/retrieval/rerank.ts", "src/config/schema.ts"], "tags": ["semantic", "multi-hop"]}
+{"q": "How does the MCP server dispatch tool calls and what shared tool context does it share with the agent loop?", "expected": ["src/mcp/server.ts", "src/agent/tools.ts", "src/agent/loop.ts"], "tags": ["semantic", "multi-hop"]}
+{"q": "How does the chat command condense follow-up questions and which module implements the rewrite logic?", "expected": ["src/cli/chat.ts", "src/retrieval/rewrite.ts"], "tags": ["semantic", "multi-hop"]}
+{"q": "How does OllamaGenerator assemble messages using prompt.ts before streaming tokens from Ollama?", "expected": ["src/generation/chat.ts", "src/generation/prompt.ts"], "tags": ["semantic", "multi-hop"]}
+{"q": "How does the IndexPipeline use the Chunker and Embedder interfaces to produce EmbeddedChunks stored via the Store interface?", "expected": ["src/ingest/pipeline.ts", "src/types/index.ts", "src/store/lancedb.ts"], "tags": ["semantic", "multi-hop"]}
+{"q": "How does the serve-mcp command wire the HybridRetriever and SQLiteSymbolIndex into the ToolContext used by the MCP server?", "expected": ["src/cli/serve-mcp.ts", "src/retrieval/hybrid.ts", "src/mcp/server.ts", "src/agent/tools.ts"], "tags": ["semantic", "multi-hop"]}
