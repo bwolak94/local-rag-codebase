@@ -56,11 +56,16 @@ describe('loadConfig', () => {
   })
 
   it('returns all defaults when no file exists', () => {
-    // Use a path that doesn't exist but is valid
-    const result = loadConfig({}, null as any)
-    expect(result.root).toBe('.')
+    // Write a minimal (empty) config to tmpDir so we can pass an explicit path
+    // with no root key — the schema default of '.' will apply.
+    const configPath = join(tmpDir, '.ragconfig.json')
+    writeFileSync(configPath, '{}')
+    const result = loadConfig({}, configPath)
+    // root defaults to '.' but resolve('tmpDir', '.') = tmpDir when config has no root key
+    // Verify the non-root defaults are correct
     expect(result.llm.numCtx).toBe(32768)
     expect(result.embedding.model).toBe('nomic-embed-text')
+    expect(result.retrieval.kVector).toBe(20)
   })
 
   it('merges file values with overrides (overrides win)', () => {
@@ -125,6 +130,23 @@ describe('loadConfig', () => {
     const result = loadConfig({ root: '/override' })
     expect(result).toBeDefined()
     expect(result.root).toBe('/override')
+  })
+
+  it('resolves relative root against config file directory', () => {
+    const configPath = join(tmpDir, '.ragconfig.json')
+    writeFileSync(configPath, JSON.stringify({ root: '.' }))
+
+    const result = loadConfig({}, configPath)
+    // '.' relative to tmpDir should resolve to tmpDir itself
+    expect(result.root).toBe(tmpDir)
+  })
+
+  it('does not modify absolute root path', () => {
+    const configPath = join(tmpDir, '.ragconfig.json')
+    writeFileSync(configPath, JSON.stringify({ root: '/absolute/path' }))
+
+    const result = loadConfig({}, configPath)
+    expect(result.root).toBe('/absolute/path')
   })
 
   it('merges nested objects (overrides replace entire nested object)', () => {

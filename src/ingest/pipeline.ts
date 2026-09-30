@@ -37,7 +37,35 @@ export class IndexPipeline {
         indexedAt INTEGER NOT NULL
       )
     `)
+    this.initChunkHashes()
     this.symbolIndex = new SQLiteSymbolIndex(config.store.path, config.root)
+  }
+
+  private initChunkHashes(): void {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS chunk_hashes (
+        chunkId TEXT PRIMARY KEY,
+        path TEXT NOT NULL,
+        hash TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_chunk_hashes_path ON chunk_hashes(path);
+    `)
+  }
+
+  private getChunkHashesForPath(path: string): Map<string, string> {
+    const rows = this.db.prepare('SELECT chunkId, hash FROM chunk_hashes WHERE path = ?')
+      .all(path) as Array<{ chunkId: string; hash: string }>
+    return new Map(rows.map(r => [r.chunkId, r.hash]))
+  }
+
+  private upsertChunkHash(chunkId: string, path: string, hash: string): void {
+    this.db.prepare(
+      'INSERT INTO chunk_hashes (chunkId, path, hash) VALUES (?, ?, ?) ON CONFLICT(chunkId) DO UPDATE SET hash=excluded.hash, path=excluded.path'
+    ).run(chunkId, path, hash)
+  }
+
+  private deleteChunkHashesForPath(path: string): void {
+    this.db.prepare('DELETE FROM chunk_hashes WHERE path = ?').run(path)
   }
 
   private getRecord(path: string): FileRecord | undefined {
@@ -84,6 +112,7 @@ export class IndexPipeline {
       for (const p of oldPaths) {
         await this.store.deleteByPath(p)
         await this.symbolIndex.deleteByPath(p)
+        this.deleteChunkHashesForPath(p)
       }
       this.db.exec('DELETE FROM files')
     }
@@ -121,24 +150,59 @@ export class IndexPipeline {
         added++
       }
 
-      await this.store.deleteByPath(file.path)
-      await this.symbolIndex.deleteByPath(file.path)
-
       const chunker = tsChunker.supports(file) ? tsChunker : fallback
       const chunks = await chunker.chunk(file)
+
+      // Chunk-level hash diffing: compare each chunk's hash against stored hashes
+      const oldChunkHashes = this.getChunkHashesForPath(file.path)
+      const newChunkIds = new Set(chunks.map(c => c.id))
+
+      // Find removed chunk IDs (in old set but not in new)
+      const removedChunkIds = [...oldChunkHashes.keys()].filter(id => !newChunkIds.has(id))
+
+      // Find changed chunks (new hash or not in old set)
+      const changedChunks = chunks.filter(c => oldChunkHashes.get(c.id) !== c.hash)
+
+      // If nothing changed and nothing was removed, skip this file entirely
+      // (handles whitespace-only file changes that don't affect chunk hashes)
+      if (changedChunks.length === 0 && removedChunkIds.length === 0) {
+        this.upsertRecord(file.path, file.hash)
+        continue
+      }
+
+      // Delete removed chunks individually — more precise than deleteByPath
+      // For simplicity with the current Store interface, if there are removed or changed
+      // chunks we re-index the whole file's changed portions.
+      // We delete by path first only if the file is being re-processed with changes.
+      if (removedChunkIds.length > 0 || changedChunks.length > 0) {
+        await this.store.deleteByPath(file.path)
+        await this.symbolIndex.deleteByPath(file.path)
+        this.deleteChunkHashesForPath(file.path)
+      }
+
       if (chunks.length === 0) {
         this.upsertRecord(file.path, file.hash)
         continue
       }
 
-      const texts = chunks.map(c => c.header + '\n' + c.content)
+      // Only embed changed chunks (new or modified); unchanged chunks were deleted
+      // from the store above so we need to re-embed all chunks for this file
+      // since deleteByPath removed them all. We embed only changedChunks but
+      // need to keep unchanged ones too — so we re-embed all to keep the store consistent.
+      const chunksToEmbed = chunks
+      const texts = chunksToEmbed.map(c => c.header + '\n' + c.content)
       const vectors = await this.embedder.embed(texts, 'document')
 
-      if (vectors.length !== chunks.length) {
-        throw new Error(`Embedder returned ${vectors.length} vectors for ${chunks.length} chunks in ${file.path}`)
+      if (vectors.length !== chunksToEmbed.length) {
+        throw new Error(`Embedder returned ${vectors.length} vectors for ${chunksToEmbed.length} chunks in ${file.path}`)
       }
-      const embedded: EmbeddedChunk[] = chunks.map((c, i) => ({ ...c, vector: vectors[i]! }))
+      const embedded: EmbeddedChunk[] = chunksToEmbed.map((c, i) => ({ ...c, vector: vectors[i]! }))
       await this.store.upsert(embedded)
+
+      // Update chunk hash records for all chunks in this file
+      for (const c of chunks) {
+        this.upsertChunkHash(c.id, file.path, c.hash)
+      }
 
       // Extract symbols and update symbol index.
       // Pass the chunks array so the extractor can resolve chunk IDs by line
@@ -194,6 +258,7 @@ export class IndexPipeline {
       if (!currentPaths.has(p)) {
         await this.store.deleteByPath(p)
         await this.symbolIndex.deleteByPath(p)
+        this.deleteChunkHashesForPath(p)
         this.deleteRecord(p)
         deleted++
       }
