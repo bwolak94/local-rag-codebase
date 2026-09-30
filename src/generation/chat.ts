@@ -19,9 +19,10 @@ export function validateCitations(answer: string, context: ScoredChunk[]): strin
     }
     const start = parseInt(startStr, 10)
     const end = parseInt(endStr, 10)
-    const chunk = context.find(c => c.chunk.path === path)
-    if (chunk && (start < chunk.chunk.startLine || end > chunk.chunk.endLine)) {
-      warnings.push(`Line range [${start}-${end}] outside chunk bounds [${chunk.chunk.startLine}-${chunk.chunk.endLine}] for ${path}`)
+    const chunksForPath = context.filter(c => c.chunk.path === path)
+    const inRange = chunksForPath.some(c => start >= c.chunk.startLine && end <= c.chunk.endLine)
+    if (!inRange) {
+      warnings.push(`Line range [${start}-${end}] not found in any chunk for ${path}`)
     }
   }
   return warnings
@@ -76,7 +77,7 @@ export class OllamaGenerator implements Generator {
     if (this.enableValidateCitations) {
       const warnings = validateCitations(fullAnswer, context)
       if (warnings.length > 0) {
-        yield '\n\n⚠️  Citation warnings:\n' + warnings.map(w => `  - ${w}`).join('\n')
+        yield '\n\nWARNING: Citation warnings:\n' + warnings.map(w => `  - ${w}`).join('\n')
       }
     }
   }

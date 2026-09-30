@@ -66,7 +66,6 @@ describe('validateCitations', () => {
     expect(warnings).toHaveLength(1)
     expect(warnings[0]).toContain('src/foo.ts')
     expect(warnings[0]).toContain('[1-100]')
-    expect(warnings[0]).toContain('[10-30]')
   })
 
   it('handles answer with no citations', () => {
@@ -98,6 +97,16 @@ describe('validateCitations', () => {
     const warnings = validateCitations(answer, context)
     expect(warnings).toHaveLength(1)
     expect(warnings[0]).toContain('[5-30]')
+  })
+
+  it('valid citation in second chunk of same file does not warn', () => {
+    const context = [
+      makeContext('src/foo.ts', 1, 20),
+      makeContext('src/foo.ts', 21, 50),
+    ]
+    const answer = 'See [src/foo.ts:30-45].'
+    const warnings = validateCitations(answer, context)
+    expect(warnings).toHaveLength(0)
   })
 })
 

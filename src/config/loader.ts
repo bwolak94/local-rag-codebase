@@ -27,5 +27,10 @@ export function loadConfig(overrides: Partial<RagConfig> = {}, configPath?: stri
       raw = { ...raw, root: resolve(dirname(file), raw['root'] as string) }
     }
   }
-  return RagConfigSchema.parse({ ...raw, ...overrides })
+  // resolve relative 'root' in overrides against process.cwd()
+  const resolvedOverrides = { ...overrides }
+  if (typeof resolvedOverrides.root === 'string' && !isAbsolute(resolvedOverrides.root)) {
+    resolvedOverrides.root = resolve(process.cwd(), resolvedOverrides.root)
+  }
+  return RagConfigSchema.parse({ ...raw, ...resolvedOverrides })
 }

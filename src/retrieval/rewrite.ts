@@ -58,12 +58,15 @@ Follow-up: ${followUp}
 
 Standalone question:`
 
-  const res = await client.generate({
-    model,
-    prompt,
-    options: { num_ctx: numCtx, temperature },  // num_ctx MUST be set
-    stream: false,
-  })
-
-  return res.response.trim() || followUp
+  try {
+    const res = await client.generate({
+      model,
+      prompt,
+      options: { num_ctx: numCtx, temperature },  // num_ctx MUST be set
+      stream: false,
+    })
+    return res.response.trim() || followUp
+  } catch {
+    return followUp  // graceful fallback: use original follow-up question
+  }
 }

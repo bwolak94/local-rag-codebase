@@ -39,6 +39,7 @@ export class HybridRetriever implements Retriever {
           this.config.llm.model,
           this.config.llm.numCtx,
           this.config.llm.rewriteTemperature,
+          this.config.llm.host,
         )
         const [hydeVec] = await this.embedder.embed([hydeSnippet], 'query')
         if (hydeVec) {

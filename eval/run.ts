@@ -81,7 +81,7 @@ export function computeTagBreakdown(
 async function main() {
   const kArg = process.argv.find(a => a.startsWith('--k='))
   const kValues = kArg
-    ? kArg.replace('--k=', '').split(',').map(Number)
+    ? kArg.replace('--k=', '').split(',').map(Number).filter(Number.isFinite)
     : [5, 10]
 
   const fullEval = process.argv.includes('--full')
@@ -89,7 +89,7 @@ async function main() {
   const config = loadConfig()
   const embedder = new OllamaEmbedder(config.embedding.model, config.embedding.batchSize)
   const store = new LanceDBStore(config.store.path, config.root, config.embedding.model)
-  const retriever = new HybridRetriever(store, embedder, config.retrieval.kVector, config.retrieval.kFts)
+  const retriever = new HybridRetriever(store, embedder, config.retrieval.kVector, config.retrieval.kFts, undefined, undefined, config.retrieval.expandDepth, config)
 
   const dataset: Question[] = readFileSync(resolve(__dirname, 'dataset.jsonl'), 'utf8')
     .trim()
