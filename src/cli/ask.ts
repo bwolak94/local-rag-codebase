@@ -49,9 +49,14 @@ export function register(program: Command) {
       } else {
         const generator = new OllamaGenerator(config)
 
-        const k = parseInt(opts.k, 10)
+        const k = parseInt(opts.k as string, 10)
+        if (isNaN(k) || k < 1) {
+          console.error('--k must be a positive integer')
+          process.exit(1)
+        }
         const filter = opts.path ? { pathPrefix: opts.path } : undefined
-        const expand: boolean = opts.expand === true || config.retrieval.expandDepth > 0
+        // --expand is opt-in; config.retrieval.expandDepth > 0 acts as config-level default
+        const expand: boolean = opts.expand !== undefined ? opts.expand === true : config.retrieval.expandDepth > 0
 
         process.stdout.write('\n')
         const context = await retriever.retrieve(question, { k, filter, expand })

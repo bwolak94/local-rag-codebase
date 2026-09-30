@@ -6,7 +6,14 @@ describe('RagConfigSchema', () => {
     const result = RagConfigSchema.parse({})
     expect(result.root).toBe('.')
     expect(result.include).toEqual(['src/**'])
-    expect(result.exclude).toEqual([])
+    expect(result.exclude).toEqual([
+      '**/package-lock.json',
+      '**/yarn.lock',
+      '**/pnpm-lock.yaml',
+      '**/*.lock',
+      '**/go.sum',
+      '**/Cargo.lock',
+    ])
     expect(result.maxFileBytes).toBe(200_000)
     expect(result.embedding.model).toBe('nomic-embed-text')
     expect(result.embedding.batchSize).toBe(48)

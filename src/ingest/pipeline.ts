@@ -7,6 +7,7 @@ import { getParser } from '../chunking/treesitter.js'
 import { SlidingWindowChunker } from '../chunking/fallback.js'
 import { SQLiteSymbolIndex } from '../symbols/index.js'
 import { extractSymbols } from '../symbols/extractor.js'
+import { ModelMismatchError } from '../store/lancedb.js'
 import type { Embedder, Store, EmbeddedChunk, SourceFile } from '../types/index.js'
 import type { RagConfig } from '../config/schema.js'
 
@@ -69,6 +70,12 @@ export class IndexPipeline {
     elapsed: number
   }> {
     const start = Date.now()
+
+    // Guard against embedding model mismatch before doing any work
+    const meta = await this.store.getMeta()
+    if (meta && meta.embedModel !== this.config.embedding.model) {
+      throw new ModelMismatchError(meta.embedModel, this.config.embedding.model)
+    }
 
     if (opts.full) {
       // Delete all vectors from the store before clearing the tracking table so

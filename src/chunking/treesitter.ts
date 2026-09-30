@@ -37,7 +37,14 @@ const JS_QUERY = `
 (function_declaration name: (identifier) @name) @symbol
 (method_definition name: (property_identifier) @name) @symbol
 (class_declaration name: (type_identifier) @name) @symbol
-(arrow_function) @symbol
+(lexical_declaration
+  (variable_declarator
+    name: (identifier) @name
+    value: (arrow_function) @symbol))
+(variable_declaration
+  (variable_declarator
+    name: (identifier) @name
+    value: (arrow_function) @symbol))
 `
 
 const QUERIES: Record<string, string> = {
@@ -73,6 +80,33 @@ export async function getParser(lang: string): Promise<Parser | null> {
   parser.setLanguage(language)
   parsers.set(lang, parser)
   return parser
+}
+
+function findParentClass(node: Parser.SyntaxNode): string | undefined {
+  let current = node.parent
+  while (current) {
+    if (current.type === 'class_declaration' || current.type === 'class_definition') {
+      return current.childForFieldName('name')?.text
+    }
+    current = current.parent
+  }
+  return undefined
+}
+
+function extractImports(rootNode: Parser.SyntaxNode): string[] {
+  const imports: string[] = []
+  for (const child of rootNode.children) {
+    if (child.type === 'import_declaration') {
+      const source = child.childForFieldName('source')?.text?.replace(/['"]/g, '')
+      if (source) imports.push(source)
+    }
+    // Python: import_statement, import_from_statement
+    if (child.type === 'import_statement' || child.type === 'import_from_statement') {
+      const name = child.childForFieldName('name')?.text ?? child.childForFieldName('module_name')?.text
+      if (name) imports.push(name)
+    }
+  }
+  return imports.slice(0, 6) // cap at 6 to avoid blowing the header size
 }
 
 function kindFromNodeType(type: string): ChunkKind {
@@ -153,9 +187,11 @@ export class TreeSitterChunker implements Chunker {
       return fallback.chunk(file)
     }
 
+    const importsForFile = extractImports(tree.rootNode)
     const matches = query.matches(tree.rootNode)
     const lines = file.content.split('\n')
-    const chunks: Chunk[] = []
+    const tinyChunks: Chunk[] = []
+    const normalChunks: Chunk[] = []
     const seen = new Set<number>() // startLine dedup
 
     for (const match of matches) {
@@ -175,13 +211,17 @@ export class TreeSitterChunker implements Chunker {
 
       if (!content.trim()) continue
 
-      const header = [
+      const parentClass = findParentClass(node)
+      const headerParts = [
         `file:${file.path}`,
         symbol ? `symbol:${symbol}` : null,
+        parentClass ? `parent:${parentClass}` : null,
         `kind:${kind}`,
         `lang:${file.lang}`,
         `lines:${startLine}-${endLine}`,
-      ].filter(Boolean).join(' ')
+        importsForFile.length > 0 ? `imports:${importsForFile.join(',')}` : null,
+      ].filter(Boolean) as string[]
+      const header = headerParts.join(' ')
 
       // split oversized symbols
       if (content.length > 2500) {
@@ -192,13 +232,13 @@ export class TreeSitterChunker implements Chunker {
 
         const h1 = header + ' part:1'
         const h2 = header + ' part:2'
-        chunks.push({
+        normalChunks.push({
           id: chunkId(file.path, symbol ? `${symbol}:1` : undefined, startLine),
           path: file.path, lang: file.lang, kind, symbol,
           startLine, endLine: startLine + half - 1,
           header: h1, content: part1, hash: chunkHash(h1, part1),
         })
-        chunks.push({
+        normalChunks.push({
           id: chunkId(file.path, symbol ? `${symbol}:2` : undefined, startLine + half),
           path: file.path, lang: file.lang, kind, symbol,
           startLine: startLine + half, endLine,
@@ -207,16 +247,42 @@ export class TreeSitterChunker implements Chunker {
         continue
       }
 
-      chunks.push({
+      const chunkObj: Chunk = {
         id: chunkId(file.path, symbol, startLine),
         path: file.path, lang: file.lang, kind, symbol,
         startLine, endLine,
         header, content, hash: chunkHash(header, content),
+      }
+
+      // merge tiny symbols into a single module-level chunk
+      if (content.length < 150) {
+        tinyChunks.push(chunkObj)
+      } else {
+        normalChunks.push(chunkObj)
+      }
+    }
+
+    // merge all tiny symbols into a single module-level chunk
+    if (tinyChunks.length > 0) {
+      const merged = tinyChunks.map(c => c.content).join('\n\n')
+      const firstTiny = tinyChunks[0]!
+      const lastTiny = tinyChunks[tinyChunks.length - 1]!
+      const mergedHeader = `file:${file.path} kind:module lang:${file.lang} lines:${firstTiny.startLine}-${lastTiny.endLine}`
+      normalChunks.push({
+        id: chunkId(file.path, undefined, firstTiny.startLine),
+        path: file.path,
+        lang: file.lang,
+        kind: 'module',
+        startLine: firstTiny.startLine,
+        endLine: lastTiny.endLine,
+        header: mergedHeader,
+        content: merged,
+        hash: chunkHash(mergedHeader, merged),
       })
     }
 
     // if no symbols found, fall back to sliding window
-    if (chunks.length === 0) return fallback.chunk(file)
-    return chunks
+    if (normalChunks.length === 0) return fallback.chunk(file)
+    return normalChunks
   }
 }

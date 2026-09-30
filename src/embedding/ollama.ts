@@ -13,7 +13,8 @@ const QUERY_PREFIXES: Record<string, string> = {
 
 export class OllamaEmbedder implements Embedder {
   readonly model: string
-  dim: number = 0
+  private _dim = 0
+  get dim(): number { return this._dim }
 
   private client: Ollama
   private batchSize: number
@@ -38,8 +39,8 @@ export class OllamaEmbedder implements Embedder {
       results.push(...res.embeddings)
     }
 
-    if (results[0] !== undefined && this.dim === 0) {
-      this.dim = results[0].length
+    if (results[0] !== undefined && this._dim === 0) {
+      this._dim = results[0].length
     }
 
     return results

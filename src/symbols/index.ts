@@ -70,8 +70,9 @@ export class SQLiteSymbolIndex implements SymbolIndex {
   }
 
   async neighbors(chunkId: string, depth = 1): Promise<string[]> {
-    // BFS: find all symbols defined in the same chunk,
-    // then find all chunks that reference those symbols
+    // BFS: two directions
+    // DIRECTION 1 (caller): find chunks that use symbols defined in the seed chunk
+    // DIRECTION 2 (callee): find definition chunks for symbols called from the seed chunk
     const visited = new Set<string>([chunkId])
     const queue: string[] = [chunkId]
 
@@ -79,22 +80,33 @@ export class SQLiteSymbolIndex implements SymbolIndex {
       const next: string[] = []
 
       for (const cid of queue) {
-        // symbols defined in this chunk
+        // DIRECTION 1: caller — chunks that use symbols defined here
         const defs = this.db
           .prepare('SELECT name FROM symbol_defs WHERE chunkId = ?')
           .all(cid) as Array<{ name: string }>
 
         for (const { name } of defs) {
-          // chunks that reference this symbol
-          const refChunks = this.db
+          const refs = this.db
             .prepare('SELECT DISTINCT chunkId FROM symbol_refs WHERE name = ?')
             .all(name) as Array<{ chunkId: string }>
 
-          for (const { chunkId: nid } of refChunks) {
-            if (!visited.has(nid)) {
-              visited.add(nid)
-              next.push(nid)
-            }
+          for (const { chunkId: nid } of refs) {
+            if (!visited.has(nid)) { visited.add(nid); next.push(nid) }
+          }
+        }
+
+        // DIRECTION 2: callee — definition chunks for symbols called from here
+        const refsFromHere = this.db
+          .prepare('SELECT DISTINCT name FROM symbol_refs WHERE chunkId = ?')
+          .all(cid) as Array<{ name: string }>
+
+        for (const { name } of refsFromHere) {
+          const defChunks = this.db
+            .prepare('SELECT DISTINCT chunkId FROM symbol_defs WHERE name = ?')
+            .all(name) as Array<{ chunkId: string }>
+
+          for (const { chunkId: nid } of defChunks) {
+            if (!visited.has(nid)) { visited.add(nid); next.push(nid) }
           }
         }
       }

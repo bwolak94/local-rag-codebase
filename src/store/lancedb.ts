@@ -114,6 +114,14 @@ export class LanceDBStore implements Store {
         const safePrefix = filter.pathPrefix.replace(/'/g, "''")
         q = q.where(`path LIKE '${safePrefix}%'`)
       }
+      if (filter?.lang && filter.lang.length > 0) {
+        const langs = filter.lang.map(l => `'${l.replace(/'/g, "''")}'`).join(', ')
+        q = q.where(`lang IN (${langs})`)
+      }
+      if (filter?.kind && filter.kind.length > 0) {
+        const kinds = filter.kind.map(k => `'${k.replace(/'/g, "''")}'`).join(', ')
+        q = q.where(`kind IN (${kinds})`)
+      }
       const rows = await q.toArray()
       return rows.map(r => ({
         chunk: rowToChunk(r),
@@ -135,6 +143,14 @@ export class LanceDBStore implements Store {
       if (filter?.pathPrefix) {
         const safePrefix = filter.pathPrefix.replace(/'/g, "''")
         q = q.where(`path LIKE '${safePrefix}%'`)
+      }
+      if (filter?.lang && filter.lang.length > 0) {
+        const langs = filter.lang.map(l => `'${l.replace(/'/g, "''")}'`).join(', ')
+        q = q.where(`lang IN (${langs})`)
+      }
+      if (filter?.kind && filter.kind.length > 0) {
+        const kinds = filter.kind.map(k => `'${k.replace(/'/g, "''")}'`).join(', ')
+        q = q.where(`kind IN (${kinds})`)
       }
       const rows = await q.toArray()
       return rows.map(r => ({
