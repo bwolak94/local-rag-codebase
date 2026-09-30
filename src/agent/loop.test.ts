@@ -120,11 +120,18 @@ describe('agentLoop', () => {
     // 9th chat call = degradation summary
     mockChat.mockResolvedValueOnce(finalResponse('Degraded answer.'))
 
-    const result = await agentLoop('List everything', makeCtx(), makeConfig())
+    const config = makeConfig()
+    const result = await agentLoop('List everything', makeCtx(), config)
 
     expect(result.answer).toBe('Degraded answer.')
     expect(result.steps).toBe(8)
     expect(result.toolsUsed.filter(t => t === 'list_dir').length).toBe(8)
+
+    // The 9th call (degradation summary) must also carry num_ctx
+    const allCalls = mockChat.mock.calls
+    const degradationCall = allCalls[allCalls.length - 1]
+    const degradationArgs = degradationCall?.[0] as { options?: { num_ctx?: number } }
+    expect(degradationArgs?.options?.num_ctx).toBe(config.llm.numCtx)
   })
 
   it('returns tool error string (not thrown) when Zod validation fails', async () => {

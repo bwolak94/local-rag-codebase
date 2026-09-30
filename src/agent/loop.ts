@@ -172,10 +172,17 @@ Do not call more than ${MAX_STEPS} tools total.`
 
     // Execute each tool call and push results
     for (const tc of msg.tool_calls) {
-      const toolName = tc.function.name
-      const toolArgs = tc.function.arguments as Record<string, unknown>
-      toolsUsed.push(toolName)
+      const toolName = tc.function?.name ?? ''
+      const rawArgs = tc.function?.arguments
+      // Ollama SDK sometimes returns arguments as a JSON string — normalise to object
+      const toolArgs: Record<string, unknown> =
+        typeof rawArgs === 'string'
+          ? (() => { try { return JSON.parse(rawArgs) as Record<string, unknown> } catch { return {} } })()
+          : (rawArgs as Record<string, unknown> | undefined) ?? {}
 
+      if (!toolName) continue  // skip malformed tool calls
+
+      toolsUsed.push(toolName)
       const result = await dispatchTool({ name: toolName, arguments: toolArgs }, ctx)
       messages.push({ role: 'tool', content: result, name: toolName })
       steps++

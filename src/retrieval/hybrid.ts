@@ -21,8 +21,9 @@ export class HybridRetriever implements Retriever {
     opts: { k: number; filter?: SearchFilter; expand?: boolean },
   ): Promise<ScoredChunk[]> {
     const [qVec] = await this.embedder.embed([query], 'query')
+    if (!qVec) return []
     const [vectorResults, ftsResults] = await Promise.all([
-      this.store.vectorSearch(qVec!, this.kVector, opts.filter),
+      this.store.vectorSearch(qVec, this.kVector, opts.filter),
       this.store.textSearch(query, this.kFts, opts.filter),
     ])
 
