@@ -44,12 +44,10 @@ Relevance score:`
 // Stub for ONNX cross-encoder reranker (Stage 5 optional)
 // Full implementation requires @xenova/transformers which is an optional dependency
 export async function crossEncoderRerank(
-  query: string,
+  _query: string,
   chunks: ScoredChunk[],
 ): Promise<ScoredChunk[]> {
-  // TODO: implement with @xenova/transformers bge-reranker-v2-m3 when GPU available
-  // For now returns chunks unchanged — this keeps the interface stable
-  console.warn('[rerank] cross-encoder not yet implemented, returning chunks unchanged')
+  // Not yet implemented — requires @xenova/transformers (optional dep)
   return chunks
 }
 
@@ -60,6 +58,9 @@ export async function rerank(
   host = 'http://localhost:11434',
 ): Promise<ScoredChunk[]> {
   if (config.retrieval.rerank === 'llm') return rerankWithLLM(query, chunks, config, host)
-  if (config.retrieval.rerank === 'cross-encoder') return crossEncoderRerank(query, chunks)
+  if (config.retrieval.rerank === 'cross-encoder') {
+    console.error('[rerank] cross-encoder is not yet implemented. Returning chunks unranked. Set rerank: "false" to suppress this message.')
+    return crossEncoderRerank(query, chunks)
+  }
   return chunks
 }

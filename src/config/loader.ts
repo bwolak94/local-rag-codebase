@@ -15,6 +15,13 @@ export function findConfigFile(start = process.cwd()): string | null {
 
 export function loadConfig(overrides: Partial<RagConfig> = {}, configPath?: string): RagConfig {
   const file = configPath ?? findConfigFile()
-  const raw = file ? JSON.parse(readFileSync(file, 'utf8')) : {}
-  return RagConfigSchema.parse({ ...raw, ...overrides })
+  let raw: unknown = {}
+  if (file) {
+    try {
+      raw = JSON.parse(readFileSync(file, 'utf8'))
+    } catch (e) {
+      throw new Error(`Failed to parse ${file}: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+  return RagConfigSchema.parse({ ...(raw as object), ...overrides })
 }

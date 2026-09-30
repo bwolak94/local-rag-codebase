@@ -2,18 +2,16 @@ import { describe, it, expect } from 'vitest'
 import { extractSymbols, getParser } from './extractor.js'
 import type { SourceFile } from '../types/index.js'
 
-function makeFile(content: string, lang = 'typescript'): SourceFile {
-  return { path: 'src/test.ts', lang, content, hash: 'testhash' }
+function makeFile(content: string, lang = 'typescript', path?: string): SourceFile {
+  const defaultPath = lang === 'python' ? 'src/test.py' : lang === 'php' ? 'src/test.php' : 'src/test.ts'
+  return { path: path ?? defaultPath, lang, content, hash: 'testhash' }
 }
 
 describe('extractSymbols', () => {
   it('returns empty result for unsupported language', async () => {
-    const file = makeFile('def foo(): pass', 'python')
-    // For unsupported lang, we pass a fake tree (won't be used)
+    const file = makeFile('some text', 'text')
+    // For unsupported lang (text), we pass a typescript tree — extractSymbols should bail early
     const parser = await getParser('typescript')
-    // We need a real tree for the call, but since lang is python it returns early
-    // Use a typescript parser to get a valid tree object for the call signature,
-    // but the file itself has lang=python so extractSymbols should bail early
     if (!parser) {
       // if WASM can't load in test env, skip gracefully
       return
@@ -237,6 +235,61 @@ class Service {
     const tree = parser.parse(content)
     const { defs } = await extractSymbols(file, tree)
     const methodDef = defs.find(d => d.name === 'doSomething')
+    expect(methodDef).toBeDefined()
+    expect(methodDef?.kind).toBe('method')
+  })
+
+  // --- Stage 6: Python ---
+
+  it('returns defs for a Python function_definition', async () => {
+    const content = `def validate_email(email):
+    return "@" in email
+`
+    const file = makeFile(content, 'python')
+    const parser = await getParser('python')
+    if (!parser) return
+
+    const tree = parser.parse(content)
+    const { defs } = await extractSymbols(file, tree)
+    const fnDef = defs.find(d => d.name === 'validate_email')
+    expect(fnDef).toBeDefined()
+    expect(fnDef?.kind).toBe('function')
+    expect(fnDef?.path).toBe('src/test.py')
+  })
+
+  it('returns defs for a Python class_definition', async () => {
+    const content = `class UserService:
+    def get_user(self, user_id):
+        return {"id": user_id}
+`
+    const file = makeFile(content, 'python')
+    const parser = await getParser('python')
+    if (!parser) return
+
+    const tree = parser.parse(content)
+    const { defs } = await extractSymbols(file, tree)
+    const classDef = defs.find(d => d.name === 'UserService')
+    expect(classDef).toBeDefined()
+    expect(classDef?.kind).toBe('class')
+  })
+
+  // --- Stage 6: PHP ---
+
+  it('returns defs for a PHP method_declaration', async () => {
+    const content = `<?php
+class OrderService {
+    public function createOrder(int $userId): array {
+        return ['id' => 1];
+    }
+}
+`
+    const file = makeFile(content, 'php')
+    const parser = await getParser('php')
+    if (!parser) return
+
+    const tree = parser.parse(content)
+    const { defs } = await extractSymbols(file, tree)
+    const methodDef = defs.find(d => d.name === 'createOrder')
     expect(methodDef).toBeDefined()
     expect(methodDef?.kind).toBe('method')
   })

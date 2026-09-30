@@ -25,15 +25,27 @@ export function register(program: Command) {
       // set up watcher
       const pending = new Set<string>()
       let debounceTimer: ReturnType<typeof setTimeout> | null = null
+      let isFlushing = false
 
       const flush = async () => {
-        const paths = [...pending].map(abs => relative(config.root, abs))
-        pending.clear()
-        for (const p of paths) console.log(`[watch] ${p} changed`)
-        const r = await pipeline.run({ paths })
-        console.log(`[watch] ${r.chunks} chunks reindexed in ${(r.elapsed / 1000).toFixed(1)}s`)
-        if (r.scanned === 0 && paths.length > 0) {
-          console.log('[watch] note: some changed paths are not yet tracked by git (run git add to index them)')
+        if (isFlushing) {
+          // re-schedule: another flush is already running
+          if (debounceTimer) clearTimeout(debounceTimer)
+          debounceTimer = setTimeout(() => { void flush() }, 500)
+          return
+        }
+        isFlushing = true
+        try {
+          const paths = [...pending].map(abs => relative(config.root, abs))
+          pending.clear()
+          for (const p of paths) console.log(`[watch] ${p} changed`)
+          const r = await pipeline.run({ paths })
+          if (r.scanned === 0 && paths.length > 0) {
+            console.log('[watch] note: some paths not yet tracked by git (run git add)')
+          }
+          console.log(`[watch] ${r.chunks} chunks reindexed in ${(r.elapsed / 1000).toFixed(1)}s`)
+        } finally {
+          isFlushing = false
         }
       }
 

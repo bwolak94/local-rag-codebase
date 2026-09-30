@@ -2,6 +2,7 @@ import { execSync } from 'node:child_process'
 import { readFileSync, statSync, existsSync } from 'node:fs'
 import { resolve, extname } from 'node:path'
 import ignore from 'ignore'
+import { minimatch } from 'minimatch'
 import { contentHash } from './hasher.js'
 import type { SourceFile } from '../types/index.js'
 
@@ -13,7 +14,10 @@ const LANG_MAP: Record<string, string> = {
   '.css': 'css', '.html': 'html',
 }
 
-const SECRET_PATTERNS = [/\.env($|\.)/, /\.pem$/, /\.key$/, /\.p12$/, /\.pfx$/]
+const SECRET_PATTERNS = [
+  /\.env($|\.)/, /\.pem$/, /\.key$/, /\.p12$/, /\.pfx$/,
+  /\/(id_rsa|id_ed25519|id_ecdsa|id_dsa)$/, /\.secret$/,
+]
 
 export function detectLang(path: string): string {
   return LANG_MAP[extname(path).toLowerCase()] ?? 'text'
@@ -45,11 +49,9 @@ export async function collectFiles(
     if (!shouldIndex(rel)) continue
     if (ig.ignores(rel)) continue
 
-    // apply include patterns
-    const matchesInclude = include.length === 0 || include.some(pat => {
-      // simple prefix matching for now
-      return rel.startsWith(pat.replace('/**', '').replace('**/', ''))
-    })
+    // apply include patterns using proper glob matching
+    const matchesInclude = include.length === 0 ||
+      include.some(pat => minimatch(rel, pat, { matchBase: true, dot: true }))
     if (!matchesInclude) continue
 
     const abs = resolve(root, rel)
