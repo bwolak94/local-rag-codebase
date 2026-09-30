@@ -8,7 +8,7 @@ export interface ExtractionResult {
   refs: SymbolRef[]
 }
 
-const SUPPORTED_LANGS = new Set(['typescript', 'tsx', 'javascript'])
+const SUPPORTED_LANGS = new Set(['typescript', 'tsx', 'javascript', 'python', 'php', 'vue'])
 
 // Node types that represent symbol definitions
 const DEF_NODE_TYPES = new Set([
@@ -17,6 +17,11 @@ const DEF_NODE_TYPES = new Set([
   'class_declaration',
   'interface_declaration',
   'type_alias_declaration',
+  // Python
+  'function_definition',
+  'class_definition',
+  // PHP
+  'method_declaration',
 ])
 
 // Node types that are parent containers for actual references (usages), not bindings.
@@ -28,6 +33,7 @@ const REF_PARENT_TYPES = new Set([
 ])
 
 function kindFromNodeType(type: string): ChunkKind {
+  if (type.includes('function_definition')) return 'function'
   if (type.includes('function')) return 'function'
   if (type.includes('method')) return 'method'
   if (type.includes('class')) return 'class'

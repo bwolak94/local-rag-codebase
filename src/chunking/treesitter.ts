@@ -1,18 +1,21 @@
 import Parser from 'web-tree-sitter'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readFileSync } from 'node:fs'
 import { chunkHash, chunkId } from '../ingest/hasher.js'
 import { SlidingWindowChunker } from './fallback.js'
 import type { Chunk, ChunkKind, Chunker, SourceFile } from '../types/index.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
-const SUPPORTED_LANGS = new Set(['typescript', 'tsx', 'javascript'])
+const SUPPORTED_LANGS = new Set(['typescript', 'tsx', 'javascript', 'python', 'php', 'vue'])
 
 const LANG_TO_WASM: Record<string, string> = {
   typescript: 'tree-sitter-typescript.wasm',
   tsx: 'tree-sitter-tsx.wasm',
   javascript: 'tree-sitter-javascript.wasm',
+  python: 'tree-sitter-python.wasm',
+  php: 'tree-sitter-php.wasm',
 }
 
 // Inline S-expression queries per language
@@ -41,6 +44,8 @@ const QUERIES: Record<string, string> = {
   typescript: TS_QUERY,
   tsx: TS_QUERY,
   javascript: JS_QUERY,
+  python: readFileSync(resolve(__dirname, 'queries/python.scm'), 'utf8'),
+  php: readFileSync(resolve(__dirname, 'queries/php.scm'), 'utf8'),
 }
 
 let parserInitialized = false
@@ -48,6 +53,8 @@ const parsers = new Map<string, Parser>()
 
 export async function getParser(lang: string): Promise<Parser | null> {
   if (!SUPPORTED_LANGS.has(lang)) return null
+  // Vue is handled via script extraction — no WASM parser for vue itself
+  if (lang === 'vue') return null
 
   if (parsers.has(lang)) return parsers.get(lang)!
 
@@ -69,6 +76,7 @@ export async function getParser(lang: string): Promise<Parser | null> {
 }
 
 function kindFromNodeType(type: string): ChunkKind {
+  if (type.includes('function_definition')) return 'function'
   if (type.includes('function')) return 'function'
   if (type.includes('method')) return 'method'
   if (type.includes('class')) return 'class'
@@ -85,6 +93,45 @@ export class TreeSitterChunker implements Chunker {
   }
 
   async chunk(file: SourceFile): Promise<Chunk[]> {
+    if (file.lang === 'vue') return this.chunkVue(file)
+    return this.chunkInner(file)
+  }
+
+  private async chunkVue(file: SourceFile): Promise<Chunk[]> {
+    const re = /(<script[^>]*>)([\s\S]*?)(<\/script>)/i
+    const match = re.exec(file.content)
+    if (!match) return fallback.chunk(file)
+
+    const openTag = match[1] ?? ''
+    const scriptContent = match[2] ?? ''
+    const isTs = /lang=["']ts["']/.test(openTag)
+    const scriptLang = isTs ? 'typescript' : 'javascript'
+
+    // use match.index + openTag.length to find exact script content start
+    const scriptStart = match.index + openTag.length
+    const lineOffset = (file.content.slice(0, scriptStart).match(/\n/g) ?? []).length
+
+    const syntheticFile: SourceFile = {
+      path: file.path,
+      lang: scriptLang,
+      content: scriptContent,
+      hash: file.hash,
+    }
+
+    const innerChunks = await this.chunkInner(syntheticFile)
+
+    // adjust line offsets and fix lang back to vue
+    return innerChunks.map(c => ({
+      ...c,
+      path: file.path,
+      lang: 'vue',
+      startLine: c.startLine + lineOffset,
+      endLine: c.endLine + lineOffset,
+      header: c.header.replace(`lang:${scriptLang}`, 'lang:vue'),
+    }))
+  }
+
+  private async chunkInner(file: SourceFile): Promise<Chunk[]> {
     const parser = await getParser(file.lang)
     if (!parser) return fallback.chunk(file)
 

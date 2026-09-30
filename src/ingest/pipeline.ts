@@ -7,7 +7,7 @@ import { getParser } from '../chunking/treesitter.js'
 import { SlidingWindowChunker } from '../chunking/fallback.js'
 import { SQLiteSymbolIndex } from '../symbols/index.js'
 import { extractSymbols } from '../symbols/extractor.js'
-import type { Embedder, Store, EmbeddedChunk } from '../types/index.js'
+import type { Embedder, Store, EmbeddedChunk, SourceFile } from '../types/index.js'
 import type { RagConfig } from '../config/schema.js'
 
 interface FileRecord {
@@ -142,6 +142,35 @@ export class IndexPipeline {
           const tree = parser.parse(file.content)
           const { defs, refs } = await extractSymbols(file, tree, chunks)
           await this.symbolIndex.upsert(defs, refs)
+        } catch {
+          // symbol extraction is best-effort — don't fail the whole pipeline
+        }
+      } else if (file.lang === 'vue') {
+        // getParser returns null for vue — extract the <script> block and parse as TS/JS
+        try {
+          const re = /(<script[^>]*>)([\s\S]*?)(<\/script>)/i
+          const m = re.exec(file.content)
+          if (m) {
+            const openTag = m[1] ?? ''
+            const scriptContent = m[2] ?? ''
+            const scriptLang = /lang=["']ts["']/.test(openTag) ? 'typescript' : 'javascript'
+            const scriptParser = await getParser(scriptLang)
+            if (scriptParser) {
+              const scriptStart = m.index + openTag.length
+              const lineOffset = (file.content.slice(0, scriptStart).match(/\n/g) ?? []).length
+              const tree = scriptParser.parse(scriptContent)
+              const syntheticFile: SourceFile = { ...file, lang: scriptLang, content: scriptContent }
+              const { defs, refs } = await extractSymbols(syntheticFile, tree, chunks)
+              // adjust line numbers back to vue file coordinates
+              const adjustedDefs = defs.map(d => ({
+                ...d, path: file.path,
+                startLine: d.startLine + lineOffset,
+                endLine: d.endLine + lineOffset,
+              }))
+              const adjustedRefs = refs.map(r => ({ ...r, path: file.path, line: r.line + lineOffset }))
+              await this.symbolIndex.upsert(adjustedDefs, adjustedRefs)
+            }
+          }
         } catch {
           // symbol extraction is best-effort — don't fail the whole pipeline
         }

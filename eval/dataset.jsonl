@@ -48,3 +48,8 @@
 {"q": "How does OllamaGenerator assemble messages using prompt.ts before streaming tokens from Ollama?", "expected": ["src/generation/chat.ts", "src/generation/prompt.ts"], "tags": ["semantic", "multi-hop"]}
 {"q": "How does the IndexPipeline use the Chunker and Embedder interfaces to produce EmbeddedChunks stored via the Store interface?", "expected": ["src/ingest/pipeline.ts", "src/types/index.ts", "src/store/lancedb.ts"], "tags": ["semantic", "multi-hop"]}
 {"q": "How does the serve-mcp command wire the HybridRetriever and SQLiteSymbolIndex into the ToolContext used by the MCP server?", "expected": ["src/cli/serve-mcp.ts", "src/retrieval/hybrid.ts", "src/mcp/server.ts", "src/agent/tools.ts"], "tags": ["semantic", "multi-hop"]}
+{"q": "Which languages does TreeSitterChunker support?", "expected": ["src/chunking/treesitter.ts"], "tags": ["identifier"]}
+{"q": "How are Vue SFC script blocks extracted for indexing?", "expected": ["src/chunking/treesitter.ts"], "tags": ["semantic"]}
+{"q": "How does the chunker handle Python decorated functions?", "expected": ["src/chunking/treesitter.ts", "src/chunking/queries/python.scm"], "tags": ["semantic"]}
+{"q": "What tree-sitter node types are extracted from PHP files?", "expected": ["src/chunking/queries/php.scm", "src/chunking/treesitter.ts"], "tags": ["identifier"]}
+{"q": "How does extractSymbols handle Python class definitions?", "expected": ["src/symbols/extractor.ts"], "tags": ["semantic"]}
