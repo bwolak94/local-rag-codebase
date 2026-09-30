@@ -1,6 +1,8 @@
 import { rrf } from './rrf.js'
+import { rerank } from './rerank.js'
 import { expandChunks } from '../symbols/expand.js'
 import type { Retriever, ScoredChunk, SearchFilter, Store, Embedder, SymbolIndex } from '../types/index.js'
+import type { RagConfig } from '../config/schema.js'
 
 export class HybridRetriever implements Retriever {
   constructor(
@@ -11,6 +13,7 @@ export class HybridRetriever implements Retriever {
     private symbolIndex?: SymbolIndex,
     private expandMaxTokens?: number,
     private expandDepth: number = 1,
+    private config?: RagConfig,
   ) {}
 
   async retrieve(
@@ -24,11 +27,15 @@ export class HybridRetriever implements Retriever {
     ])
 
     const fused = rrf([vectorResults, ftsResults])
-    const top = fused.slice(0, opts.k)
+    let top = fused.slice(0, opts.k)
 
     if (opts.expand && this.symbolIndex) {
       const maxTokens = this.expandMaxTokens ?? 4096
-      return expandChunks(top, this.symbolIndex, this.store, maxTokens, this.expandDepth)
+      top = await expandChunks(top, this.symbolIndex, this.store, maxTokens, this.expandDepth)
+    }
+
+    if (this.config && this.config.retrieval.rerank !== 'false') {
+      top = await rerank(query, top, this.config)
     }
 
     return top
