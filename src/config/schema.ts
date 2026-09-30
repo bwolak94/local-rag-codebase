@@ -18,6 +18,7 @@ export const RagConfigSchema = z.object({
   }).default({}),
   llm: z.object({
     model: z.string().default('qwen2.5-coder:14b'),
+    host: z.string().default('http://localhost:11434'),
     numCtx: z.number().default(32768),
     temperature: z.number().default(0.1),
     rewriteTemperature: z.number().default(0.3),

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { condensQuestion } from './rewrite.js'
+import { condensQuestion, expandQuery } from './rewrite.js'
 import type { ChatTurn } from '../types/index.js'
 
 // Mock the ollama package
@@ -97,6 +97,87 @@ describe('condensQuestion', () => {
 
     const history: ChatTurn[] = [{ role: 'user', content: 'hi' }]
     await condensQuestion(history, 'follow', 'model', 32768)
+
+    const callArgs = mockGenerate.mock.calls[0]?.[0]
+    expect(callArgs.stream).toBe(false)
+  })
+
+  it('falls back to followUp when generate throws', async () => {
+    mockGenerate.mockRejectedValue(new Error('network error'))
+
+    const history: ChatTurn[] = [
+      { role: 'user', content: 'previous question' },
+      { role: 'assistant', content: 'previous answer' },
+    ]
+    const followUp = 'my follow-up question'
+    const result = await condensQuestion(history, followUp, 'model', 32768)
+
+    expect(result).toBe(followUp)
+  })
+})
+
+describe('expandQuery', () => {
+  beforeEach(() => {
+    mockGenerate.mockReset()
+  })
+
+  it('returns hypothetical snippet from LLM response', async () => {
+    mockGenerate.mockResolvedValue({
+      response: 'function calculateVAT(amount: number, rate: number): number { return amount * rate }',
+    })
+
+    const result = await expandQuery(
+      'How does VAT calculation work?',
+      'qwen2.5-coder:14b',
+      32768,
+    )
+
+    expect(result).toBe('function calculateVAT(amount: number, rate: number): number { return amount * rate }')
+  })
+
+  it('falls back to original query on LLM error', async () => {
+    mockGenerate.mockRejectedValue(new Error('Connection refused'))
+
+    const originalQuery = 'How does VAT calculation work?'
+    const result = await expandQuery(originalQuery, 'qwen2.5-coder:14b', 32768)
+
+    expect(result).toBe(originalQuery)
+  })
+
+  it('falls back to original query on empty response', async () => {
+    mockGenerate.mockResolvedValue({ response: '   ' })
+
+    const originalQuery = 'How does VAT calculation work?'
+    const result = await expandQuery(originalQuery, 'qwen2.5-coder:14b', 32768)
+
+    // empty string after trim → fallback to original
+    expect(result).toBe(originalQuery)
+  })
+
+  it('passes num_ctx in options (critical rule)', async () => {
+    mockGenerate.mockResolvedValue({ response: 'some code snippet' })
+
+    await expandQuery('some query', 'qwen2.5-coder:14b', 16384)
+
+    const callArgs = mockGenerate.mock.calls[0]?.[0]
+    expect(callArgs).toBeDefined()
+    expect(callArgs.options).toBeDefined()
+    expect(callArgs.options.num_ctx).toBe(16384)
+  })
+
+  it('uses the provided temperature', async () => {
+    mockGenerate.mockResolvedValue({ response: 'snippet' })
+
+    await expandQuery('query', 'model', 32768, 0.7)
+
+    const callArgs = mockGenerate.mock.calls[0]?.[0]
+    expect(callArgs.options.temperature).toBe(0.7)
+  })
+
+  it('sets stream: false in generate call', async () => {
+    mockGenerate.mockResolvedValue({ response: 'snippet' })
+
+    await expandQuery('query', 'model', 32768)
 
     const callArgs = mockGenerate.mock.calls[0]?.[0]
     expect(callArgs.stream).toBe(false)

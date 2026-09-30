@@ -1,6 +1,7 @@
 import { rrf } from './rrf.js'
 import { rerank } from './rerank.js'
 import { expandChunks } from '../symbols/expand.js'
+import { expandQuery } from './rewrite.js'
 import type { Retriever, ScoredChunk, SearchFilter, Store, Embedder, SymbolIndex } from '../types/index.js'
 import type { RagConfig } from '../config/schema.js'
 
@@ -27,7 +28,30 @@ export class HybridRetriever implements Retriever {
       this.store.textSearch(query, this.kFts, opts.filter),
     ])
 
-    const fused = rrf([vectorResults, ftsResults])
+    let rrfLists: ScoredChunk[][] = [vectorResults, ftsResults]
+
+    // HyDE-lite: when rewrite is enabled, generate a hypothetical code snippet
+    // and run an additional vector search with it, then fuse all three lists
+    if (this.config?.retrieval.rewrite === true) {
+      try {
+        const hydeSnippet = await expandQuery(
+          query,
+          this.config.llm.model,
+          this.config.llm.numCtx,
+          this.config.llm.rewriteTemperature,
+          this.config.llm.host,
+        )
+        const [hydeVec] = await this.embedder.embed([hydeSnippet], 'query')
+        if (hydeVec) {
+          const hydeResults = await this.store.vectorSearch(hydeVec, this.kVector, opts.filter)
+          rrfLists = [vectorResults, ftsResults, hydeResults]
+        }
+      } catch {
+        // HyDE expansion is best-effort; fall through to standard 2-list fusion
+      }
+    }
+
+    const fused = rrf(rrfLists)
     let top = fused.slice(0, opts.k)
 
     if (opts.expand && this.symbolIndex) {

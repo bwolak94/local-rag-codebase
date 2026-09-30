@@ -18,6 +18,7 @@ describe('RagConfigSchema', () => {
     expect(result.embedding.model).toBe('nomic-embed-text')
     expect(result.embedding.batchSize).toBe(48)
     expect(result.llm.model).toBe('qwen2.5-coder:14b')
+    expect(result.llm.host).toBe('http://localhost:11434')
     expect(result.llm.numCtx).toBe(32768)
     expect(result.llm.temperature).toBe(0.1)
     expect(result.llm.rewriteTemperature).toBe(0.3)
@@ -114,5 +115,15 @@ describe('RagConfigSchema', () => {
     })
     expect(result.include).toEqual(['lib/**', 'app/**'])
     expect(result.exclude).toEqual(['**/*.test.ts'])
+  })
+
+  it('llm.host defaults to http://localhost:11434', () => {
+    const result = RagConfigSchema.parse({})
+    expect(result.llm.host).toBe('http://localhost:11434')
+  })
+
+  it('llm.host can be overridden', () => {
+    const result = RagConfigSchema.parse({ llm: { host: 'http://remote:11434' } })
+    expect(result.llm.host).toBe('http://remote:11434')
   })
 })

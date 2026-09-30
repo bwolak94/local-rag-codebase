@@ -4,12 +4,37 @@ import { allocateBudget, trimContext, trimHistory } from './budget.js'
 import type { Generator, ScoredChunk, ChatTurn } from '../types/index.js'
 import type { RagConfig } from '../config/schema.js'
 
+export function validateCitations(answer: string, context: ScoredChunk[]): string[] {
+  const warnings: string[] = []
+  const citationPattern = /\[([^\]]+):(\d+)-(\d+)\]/g
+  const contextPaths = new Set(context.map(c => c.chunk.path))
+
+  let match: RegExpExecArray | null
+  while ((match = citationPattern.exec(answer)) !== null) {
+    const [, path, startStr, endStr] = match
+    if (!path || !startStr || !endStr) continue
+    if (!contextPaths.has(path)) {
+      warnings.push(`Cited file not in context: ${path}`)
+      continue
+    }
+    const start = parseInt(startStr, 10)
+    const end = parseInt(endStr, 10)
+    const chunksForPath = context.filter(c => c.chunk.path === path)
+    const inRange = chunksForPath.some(c => start >= c.chunk.startLine && end <= c.chunk.endLine)
+    if (!inRange) {
+      warnings.push(`Line range [${start}-${end}] not found in any chunk for ${path}`)
+    }
+  }
+  return warnings
+}
+
 export class OllamaGenerator implements Generator {
   private client: Ollama
 
   constructor(
     private config: RagConfig,
     host = 'http://localhost:11434',
+    private enableValidateCitations = true,
   ) {
     this.client = new Ollama({ host })
   }
@@ -39,9 +64,21 @@ export class OllamaGenerator implements Generator {
       },
     })
 
+    let fullAnswer = ''
     for await (const chunk of stream) {
       const text = chunk.message.content
-      if (text) yield text
+      if (text) {
+        fullAnswer += text
+        yield text
+      }
+    }
+
+    // After stream ends, validate citations and emit warnings if any
+    if (this.enableValidateCitations) {
+      const warnings = validateCitations(fullAnswer, context)
+      if (warnings.length > 0) {
+        yield '\n\nWARNING: Citation warnings:\n' + warnings.map(w => `  - ${w}`).join('\n')
+      }
     }
   }
 }

@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { IndexPipeline } from './pipeline.js'
-import type { Store, Embedder, SourceFile } from '../types/index.js'
+import type { Store, Embedder, SourceFile, Chunk } from '../types/index.js'
 import type { RagConfig } from '../config/schema.js'
 import { tmpdir } from 'node:os'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
+import Database from 'better-sqlite3'
+import { resolve } from 'node:path'
 
 // Mock the walker so tests do not require a real git repo
 vi.mock('./walker.js', () => ({
@@ -37,7 +39,7 @@ function testConfig(root: string): RagConfig {
     exclude: [],
     maxFileBytes: 200_000,
     embedding: { model: 'nomic-embed-text', batchSize: 48 },
-    llm: { model: 'qwen2.5-coder:14b', numCtx: 32768, temperature: 0.1, rewriteTemperature: 0.3 },
+    llm: { model: 'qwen2.5-coder:14b', host: 'http://localhost:11434', numCtx: 32768, temperature: 0.1, rewriteTemperature: 0.3 },
     retrieval: { kVector: 20, kFts: 20, kFinal: 8, expandDepth: 1, rewrite: false, rerank: 'false' },
     store: { driver: 'lancedb', path: '.rag-test' },
     budget: { contextFraction: 0.6, historyFraction: 0.2 },
@@ -166,6 +168,135 @@ describe('IndexPipeline', () => {
     expect(store.deleteByPath).toHaveBeenCalledWith(fakeFile.path)
 
     // restore
+    mockedCollect.mockResolvedValue([])
+  })
+
+  it('run() creates chunk_hashes table', () => {
+    const store = mockStore()
+    const embedder = mockEmbedder()
+    const config = testConfig(tmpDir)
+    new IndexPipeline(config, store, embedder)
+
+    // Verify the chunk_hashes table was created in the SQLite db
+    const dbPath = resolve(tmpDir, '.rag-test', 'files.db')
+    expect(existsSync(dbPath)).toBe(true)
+    const db = new Database(dbPath)
+    const tables = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='chunk_hashes'"
+    ).all() as Array<{ name: string }>
+    expect(tables.length).toBe(1)
+    expect(tables[0]?.name).toBe('chunk_hashes')
+    db.close()
+  })
+
+  it('run() skips unchanged chunks (same hash) on second run', async () => {
+    const { collectFiles } = await import('./walker.js')
+    const mockedCollect = vi.mocked(collectFiles)
+
+    // Mock the treesitter chunker to produce a deterministic chunk
+    vi.mock('../chunking/treesitter.js', async (importOriginal) => {
+      const original = await importOriginal<typeof import('../chunking/treesitter.js')>()
+      return {
+        ...original,
+        TreeSitterChunker: vi.fn().mockImplementation(() => ({
+          supports: () => false, // force fallback chunker
+          chunk: vi.fn(),
+        })),
+        getParser: vi.fn().mockResolvedValue(null),
+      }
+    })
+
+    const fakeFile: SourceFile = {
+      path: 'src/stable.ts',
+      lang: 'typescript',
+      content: 'export const stable = 1',
+      hash: 'stablehash',
+    }
+    mockedCollect.mockResolvedValue([fakeFile])
+
+    const store = mockStore()
+    const embedder = mockEmbedder()
+    const config = testConfig(tmpDir)
+    const pipeline = new IndexPipeline(config, store, embedder)
+
+    // First run: file processed (added = 1), embed called
+    await pipeline.run()
+    const embedCallsAfterFirst = vi.mocked(embedder.embed).mock.calls.length
+
+    // Second run: same file, same hash → no new chunks to process
+    await pipeline.run()
+    const embedCallsAfterSecond = vi.mocked(embedder.embed).mock.calls.length
+
+    // embed should not have been called again since the file hash matches
+    // (file-level skip fires before chunk-level processing)
+    expect(embedCallsAfterSecond).toBe(embedCallsAfterFirst)
+
+    mockedCollect.mockResolvedValue([])
+  })
+
+  it('run() re-embeds changed chunks (different file hash)', async () => {
+    const { collectFiles } = await import('./walker.js')
+    const mockedCollect = vi.mocked(collectFiles)
+
+    const fileV1: SourceFile = {
+      path: 'src/changing.ts',
+      lang: 'typescript',
+      content: 'export const v = 1',
+      hash: 'hashv1',
+    }
+    const fileV2: SourceFile = {
+      path: 'src/changing.ts',
+      lang: 'typescript',
+      content: 'export const v = 2',
+      hash: 'hashv2',
+    }
+
+    const store = mockStore()
+    const embedder = mockEmbedder()
+    const config = testConfig(tmpDir)
+    const pipeline = new IndexPipeline(config, store, embedder)
+
+    mockedCollect.mockResolvedValue([fileV1])
+    await pipeline.run()
+
+    // Change the file content + hash
+    mockedCollect.mockResolvedValue([fileV2])
+    await pipeline.run()
+
+    // deleteByPath should have been called for the changed file
+    expect(store.deleteByPath).toHaveBeenCalledWith('src/changing.ts')
+
+    mockedCollect.mockResolvedValue([])
+  })
+
+  it('removed chunk IDs are deleted from store on second run', async () => {
+    const { collectFiles } = await import('./walker.js')
+    const mockedCollect = vi.mocked(collectFiles)
+
+    const fakeFile: SourceFile = {
+      path: 'src/shrinking.ts',
+      lang: 'typescript',
+      content: 'export const a = 1',
+      hash: 'hash-shrinking-v1',
+    }
+
+    mockedCollect.mockResolvedValue([fakeFile])
+    const store = mockStore()
+    const embedder = mockEmbedder()
+    const config = testConfig(tmpDir)
+    const pipeline = new IndexPipeline(config, store, embedder)
+
+    // First run: file with one hash
+    await pipeline.run()
+
+    // Second run: same path, different hash (simulates content change)
+    const fakeFileV2: SourceFile = { ...fakeFile, hash: 'hash-shrinking-v2' }
+    mockedCollect.mockResolvedValue([fakeFileV2])
+    await pipeline.run()
+
+    // deleteByPath should have been called when re-processing changed file
+    expect(store.deleteByPath).toHaveBeenCalledWith(fakeFile.path)
+
     mockedCollect.mockResolvedValue([])
   })
 })

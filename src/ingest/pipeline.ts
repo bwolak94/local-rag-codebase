@@ -37,7 +37,35 @@ export class IndexPipeline {
         indexedAt INTEGER NOT NULL
       )
     `)
+    this.initChunkHashes()
     this.symbolIndex = new SQLiteSymbolIndex(config.store.path, config.root)
+  }
+
+  private initChunkHashes(): void {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS chunk_hashes (
+        chunkId TEXT PRIMARY KEY,
+        path TEXT NOT NULL,
+        hash TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_chunk_hashes_path ON chunk_hashes(path);
+    `)
+  }
+
+  private getChunkHashesForPath(path: string): Map<string, string> {
+    const rows = this.db.prepare('SELECT chunkId, hash FROM chunk_hashes WHERE path = ?')
+      .all(path) as Array<{ chunkId: string; hash: string }>
+    return new Map(rows.map(r => [r.chunkId, r.hash]))
+  }
+
+  private upsertChunkHash(chunkId: string, path: string, hash: string): void {
+    this.db.prepare(
+      'INSERT INTO chunk_hashes (chunkId, path, hash) VALUES (?, ?, ?) ON CONFLICT(chunkId) DO UPDATE SET hash=excluded.hash, path=excluded.path'
+    ).run(chunkId, path, hash)
+  }
+
+  private deleteChunkHashesForPath(path: string): void {
+    this.db.prepare('DELETE FROM chunk_hashes WHERE path = ?').run(path)
   }
 
   private getRecord(path: string): FileRecord | undefined {
@@ -84,6 +112,7 @@ export class IndexPipeline {
       for (const p of oldPaths) {
         await this.store.deleteByPath(p)
         await this.symbolIndex.deleteByPath(p)
+        this.deleteChunkHashesForPath(p)
       }
       this.db.exec('DELETE FROM files')
     }
@@ -121,11 +150,32 @@ export class IndexPipeline {
         added++
       }
 
-      await this.store.deleteByPath(file.path)
-      await this.symbolIndex.deleteByPath(file.path)
-
       const chunker = tsChunker.supports(file) ? tsChunker : fallback
       const chunks = await chunker.chunk(file)
+
+      // Chunk-level hash diffing: compare each chunk's hash against stored hashes
+      const oldChunkHashes = this.getChunkHashesForPath(file.path)
+      const newChunkIds = new Set(chunks.map(c => c.id))
+
+      // Find removed chunk IDs (in old set but not in new)
+      const removedChunkIds = [...oldChunkHashes.keys()].filter(id => !newChunkIds.has(id))
+
+      // Find changed chunks (new hash or not in old set)
+      const changedChunks = chunks.filter(c => oldChunkHashes.get(c.id) !== c.hash)
+
+      // If nothing changed and nothing was removed, skip this file entirely
+      // (handles whitespace-only file changes that don't affect chunk hashes)
+      if (changedChunks.length === 0 && removedChunkIds.length === 0) {
+        this.upsertRecord(file.path, file.hash)
+        continue
+      }
+
+      // The Store interface supports deleteByPath but not per-chunk delete.
+      // When any chunk changes we delete all vectors for this file and re-embed everything.
+      await this.store.deleteByPath(file.path)
+      await this.symbolIndex.deleteByPath(file.path)
+      this.deleteChunkHashesForPath(file.path)
+
       if (chunks.length === 0) {
         this.upsertRecord(file.path, file.hash)
         continue
@@ -139,6 +189,12 @@ export class IndexPipeline {
       }
       const embedded: EmbeddedChunk[] = chunks.map((c, i) => ({ ...c, vector: vectors[i]! }))
       await this.store.upsert(embedded)
+
+      // Persist chunk hashes in a single transaction (one fsync instead of N)
+      const upsertAll = this.db.transaction((cs: typeof chunks) => {
+        for (const c of cs) this.upsertChunkHash(c.id, file.path, c.hash)
+      })
+      upsertAll(chunks)
 
       // Extract symbols and update symbol index.
       // Pass the chunks array so the extractor can resolve chunk IDs by line
@@ -194,6 +250,7 @@ export class IndexPipeline {
       if (!currentPaths.has(p)) {
         await this.store.deleteByPath(p)
         await this.symbolIndex.deleteByPath(p)
+        this.deleteChunkHashesForPath(p)
         this.deleteRecord(p)
         deleted++
       }
