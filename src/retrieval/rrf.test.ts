@@ -95,4 +95,22 @@ describe('rrf', () => {
     expect(scores[0]).toBeCloseTo(scores[1]!)
     expect(scores[1]).toBeCloseTo(scores[2]!)
   })
+
+  it('correctly computes score for document appearing in two lists at known ranks', () => {
+    const k = 60
+    const chunk = makeChunk('a')
+    const list1 = [chunk]                           // rank 0 in list1
+    const list2 = [makeChunk('b'), chunk]           // rank 1 in list2
+    const result = rrf([list1, list2], k)
+    const found = result.find(r => r.chunk.id === 'a')!
+    // expected: 1/(60+1) + 1/(60+2)
+    const expected = 1 / (k + 1) + 1 / (k + 2)
+    expect(found.score).toBeCloseTo(expected, 6)
+  })
+
+  it('deduplicates chunks appearing in multiple lists', () => {
+    const chunk = makeChunk('dup')
+    const result = rrf([[chunk], [chunk]], 60)
+    expect(result.filter(r => r.chunk.id === 'dup')).toHaveLength(1)
+  })
 })

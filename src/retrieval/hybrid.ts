@@ -1,46 +1,35 @@
 import { rrf } from './rrf.js'
 import { rerank } from './rerank.js'
 import { expandChunks } from '../symbols/expand.js'
-import { expandQuery, condensQuestion } from './rewrite.js'
-import type { Retriever, ScoredChunk, SearchFilter, Store, Embedder, SymbolIndex, ChatTurn } from '../types/index.js'
+import { expandQuery } from './rewrite.js'
+import type { Retriever, ScoredChunk, SearchFilter, Store, Embedder, SymbolIndex } from '../types/index.js'
 import type { RagConfig } from '../config/schema.js'
 
 export class HybridRetriever implements Retriever {
   constructor(
     private store: Store,
     private embedder: Embedder,
-    private kVector: number,
-    private kFts: number,
-    private symbolIndex?: SymbolIndex,
-    private expandMaxTokens?: number,
-    private expandDepth: number = 1,
+    private opts: {
+      kVector: number
+      kFts: number
+      symbolIndex?: SymbolIndex
+      expandMaxTokens?: number
+      expandDepth?: number
+    },
     private config?: RagConfig,
   ) {}
 
   async retrieve(
     query: string,
-    opts: { k: number; filter?: SearchFilter; expand?: boolean; history?: ChatTurn[] },
+    opts: { k: number; filter?: SearchFilter; expand?: boolean },
   ): Promise<ScoredChunk[]> {
-    let effectiveQuery = query
-    if (
-      this.config?.retrieval.rewrite === true &&
-      opts.history &&
-      opts.history.length > 0
-    ) {
-      effectiveQuery = await condensQuestion(
-        opts.history,
-        query,
-        this.config.llm.model,
-        this.config.llm.numCtx,
-        this.config.llm.rewriteTemperature,
-        this.config.llm.host,
-      )
-    }
+    const effectiveQuery = query
+
     const [qVec] = await this.embedder.embed([effectiveQuery], 'query')
     if (!qVec) return []
     const [vectorResults, ftsResults] = await Promise.all([
-      this.store.vectorSearch(qVec, this.kVector, opts.filter),
-      this.store.textSearch(effectiveQuery, this.kFts, opts.filter),
+      this.store.vectorSearch(qVec, this.opts.kVector, opts.filter),
+      this.store.textSearch(effectiveQuery, this.opts.kFts, opts.filter),
     ])
 
     let rrfLists: ScoredChunk[][] = [vectorResults, ftsResults]
@@ -53,12 +42,12 @@ export class HybridRetriever implements Retriever {
           effectiveQuery,
           this.config.llm.model,
           this.config.llm.numCtx,
-          this.config.llm.rewriteTemperature,
+          this.config.retrieval.hydeTemperature,
           this.config.llm.host,
         )
         const [hydeVec] = await this.embedder.embed([hydeSnippet], 'document')
         if (hydeVec) {
-          const hydeResults = await this.store.vectorSearch(hydeVec, this.kVector, opts.filter)
+          const hydeResults = await this.store.vectorSearch(hydeVec, this.opts.kVector, opts.filter)
           rrfLists = [vectorResults, ftsResults, hydeResults]
         }
       } catch {
@@ -66,12 +55,14 @@ export class HybridRetriever implements Retriever {
       }
     }
 
-    const fused = rrf(rrfLists)
+    const rrfK = this.config?.retrieval.rrfK ?? 60
+    const fused = rrf(rrfLists, rrfK)
     let top = fused.slice(0, opts.k)
 
-    if (opts.expand && this.symbolIndex) {
-      const maxTokens = this.expandMaxTokens ?? 4096
-      top = await expandChunks(top, this.symbolIndex, this.store, maxTokens, this.expandDepth)
+    if (opts.expand && this.opts.symbolIndex) {
+      const maxTokens = this.opts.expandMaxTokens ?? 4096
+      const expandDepth = this.opts.expandDepth ?? 1
+      top = await expandChunks(top, this.opts.symbolIndex, this.store, maxTokens, expandDepth)
     }
 
     if (this.config && this.config.retrieval.rerank !== 'none') {

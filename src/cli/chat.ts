@@ -29,12 +29,16 @@ export function register(program: Command) {
         config.budget.historyFraction,
       )
       const retriever = new HybridRetriever(
-        store, embedder,
-        config.retrieval.kVector,
-        config.retrieval.kFts,
-        symbolIndex,
-        contextTokens,
-        config.retrieval.expandDepth,
+        store,
+        embedder,
+        {
+          kVector: config.retrieval.kVector,
+          kFts: config.retrieval.kFts,
+          symbolIndex,
+          expandMaxTokens: contextTokens,
+          expandDepth: config.retrieval.expandDepth,
+        },
+        config,
       )
       const generator = new OllamaGenerator(config, config.llm.host)
       const history: ChatTurn[] = []

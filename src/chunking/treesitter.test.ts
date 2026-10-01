@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -7,6 +7,13 @@ import type { SourceFile } from '../types/index.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const FIXTURES = resolve(__dirname, '../../test/fixtures')
+
+let parserAvailable = false
+
+beforeAll(async () => {
+  const parser = await getParser('typescript')
+  parserAvailable = parser !== null && parser !== undefined
+})
 
 function makeFile(content: string, lang = 'typescript', path = 'src/test.ts'): SourceFile {
   return {
@@ -55,31 +62,24 @@ describe('TreeSitterChunker', () => {
     expect(chunker.supports(file)).toBe(false)
   })
 
-  it('chunking a simple TypeScript function produces at least 1 chunk', async () => {
+  it.skipIf(() => !parserAvailable)('chunking a simple TypeScript function produces at least 1 chunk', async () => {
     const content = `
 export function greet(name: string): string {
   return 'Hello ' + name
 }
 `.trim()
     const file = makeFile(content, 'typescript')
-    const parser = await getParser('typescript')
-    if (!parser) {
-      // WASM unavailable, skip
-      return
-    }
     const chunks = await chunker.chunk(file)
     expect(chunks.length).toBeGreaterThanOrEqual(1)
   })
 
-  it('chunk has kind function for function declarations', async () => {
+  it.skipIf(() => !parserAvailable)('chunk has kind function for function declarations', async () => {
     const content = `
 function myFunc() {
   return 42
 }
 `.trim()
     const file = makeFile(content, 'typescript')
-    const parser = await getParser('typescript')
-    if (!parser) return
     const chunks = await chunker.chunk(file)
     // Short functions (< 150 chars) are merged into a module-level chunk.
     // Accept either a direct function chunk or a module chunk containing the symbol name.
@@ -88,15 +88,13 @@ function myFunc() {
     expect(funcChunk ?? moduleChunk).toBeDefined()
   })
 
-  it('chunk has kind class for class declarations', async () => {
+  it.skipIf(() => !parserAvailable)('chunk has kind class for class declarations', async () => {
     const content = `
 class MyService {
   doWork(): void {}
 }
 `.trim()
     const file = makeFile(content, 'typescript')
-    const parser = await getParser('typescript')
-    if (!parser) return
     const chunks = await chunker.chunk(file)
     // Short class bodies (< 150 chars) are merged into a module-level chunk.
     const classChunk = chunks.find(c => c.kind === 'class' && c.symbol === 'MyService')
@@ -104,15 +102,13 @@ class MyService {
     expect(classChunk ?? moduleChunk).toBeDefined()
   })
 
-  it('chunk has kind interface for interface declarations', async () => {
+  it.skipIf(() => !parserAvailable)('chunk has kind interface for interface declarations', async () => {
     const content = `
 interface Reader {
   read(): string
 }
 `.trim()
     const file = makeFile(content, 'typescript')
-    const parser = await getParser('typescript')
-    if (!parser) return
     const chunks = await chunker.chunk(file)
     // Short interface bodies (< 150 chars) are merged into a module-level chunk.
     const ifaceChunk = chunks.find(c => c.kind === 'interface' && c.symbol === 'Reader')
@@ -120,15 +116,13 @@ interface Reader {
     expect(ifaceChunk ?? moduleChunk).toBeDefined()
   })
 
-  it('chunk has non-empty symbol', async () => {
+  it.skipIf(() => !parserAvailable)('chunk has non-empty symbol', async () => {
     const content = `
 export function test() {
   return 1
 }
 `.trim()
     const file = makeFile(content, 'typescript')
-    const parser = await getParser('typescript')
-    if (!parser) return
     const chunks = await chunker.chunk(file)
     for (const chunk of chunks) {
       // 'module' kind is used for merged tiny symbols — symbol field is intentionally undefined.
@@ -139,15 +133,13 @@ export function test() {
     }
   })
 
-  it('chunk header contains file, symbol, kind, lang, lines', async () => {
+  it.skipIf(() => !parserAvailable)('chunk header contains file, symbol, kind, lang, lines', async () => {
     const content = `
 function test() {
   return 1
 }
 `.trim()
     const file = makeFile(content, 'typescript')
-    const parser = await getParser('typescript')
-    if (!parser) return
     const chunks = await chunker.chunk(file)
     const funcChunk = chunks.find(c => c.kind === 'function')
     if (funcChunk) {
@@ -169,24 +161,20 @@ function test() {
     expect(textChunks.length).toBeGreaterThan(0)
   })
 
-  it('falls back to SlidingWindowChunker for empty file', async () => {
+  it.skipIf(() => !parserAvailable)('falls back to SlidingWindowChunker for empty file', async () => {
     const file = makeFile('', 'typescript')
-    const parser = await getParser('typescript')
-    if (!parser) return
     const chunks = await chunker.chunk(file)
     // Empty file should produce no chunks
     expect(chunks).toHaveLength(0)
   })
 
-  it('context header is prepended before embedding (tested via content)', async () => {
+  it.skipIf(() => !parserAvailable)('context header is prepended before embedding (tested via content)', async () => {
     const content = `
 function test() {
   return 1
 }
 `.trim()
     const file = makeFile(content, 'typescript')
-    const parser = await getParser('typescript')
-    if (!parser) return
     const chunks = await chunker.chunk(file)
     for (const chunk of chunks) {
       // Each chunk should have a header field with context info
@@ -195,15 +183,13 @@ function test() {
     }
   })
 
-  it('chunk id is 16 hex chars', async () => {
+  it.skipIf(() => !parserAvailable)('chunk id is 16 hex chars', async () => {
     const content = `
 function myFunc() {
   return 1
 }
 `.trim()
     const file = makeFile(content, 'typescript')
-    const parser = await getParser('typescript')
-    if (!parser) return
     const chunks = await chunker.chunk(file)
     for (const chunk of chunks) {
       expect(chunk.id).toHaveLength(16)
@@ -211,7 +197,7 @@ function myFunc() {
     }
   })
 
-  it('chunks have correct startLine and endLine (1-indexed)', async () => {
+  it.skipIf(() => !parserAvailable)('chunks have correct startLine and endLine (1-indexed)', async () => {
     const content = `function alpha() {
   return 1
 }
@@ -220,8 +206,6 @@ function beta() {
   return 2
 }`
     const file = makeFile(content, 'typescript')
-    const parser = await getParser('typescript')
-    if (!parser) return
     const chunks = await chunker.chunk(file)
     for (const chunk of chunks) {
       expect(chunk.startLine).toBeGreaterThanOrEqual(1)
@@ -229,7 +213,7 @@ function beta() {
     }
   })
 
-  it('lang and path are preserved in chunks', async () => {
+  it.skipIf(() => !parserAvailable)('lang and path are preserved in chunks', async () => {
     const content = `
 function test() {
   return 1
@@ -237,8 +221,6 @@ function test() {
 `.trim()
     const file = makeFile(content, 'typescript')
     file.path = 'src/custom/module.ts'
-    const parser = await getParser('typescript')
-    if (!parser) return
     const chunks = await chunker.chunk(file)
     for (const chunk of chunks) {
       expect(chunk.lang).toBe('typescript')
@@ -248,33 +230,27 @@ function test() {
 
   // --- Stage 6: Python ---
 
-  it('chunking sample.py produces chunks with kind function or class', async () => {
+  it.skipIf(() => !parserAvailable)('chunking sample.py produces chunks with kind function or class', async () => {
     const content = readFileSync(resolve(FIXTURES, 'sample.py'), 'utf8')
     const file = makeFile(content, 'python', 'test/fixtures/sample.py')
-    const parser = await getParser('python')
-    if (!parser) return
     const chunks = await chunker.chunk(file)
     expect(chunks.length).toBeGreaterThanOrEqual(1)
     const kindedChunks = chunks.filter(c => c.kind === 'function' || c.kind === 'class')
     expect(kindedChunks.length).toBeGreaterThanOrEqual(1)
   })
 
-  it('chunking sample.py chunk headers contain lang:python', async () => {
+  it.skipIf(() => !parserAvailable)('chunking sample.py chunk headers contain lang:python', async () => {
     const content = readFileSync(resolve(FIXTURES, 'sample.py'), 'utf8')
     const file = makeFile(content, 'python', 'test/fixtures/sample.py')
-    const parser = await getParser('python')
-    if (!parser) return
     const chunks = await chunker.chunk(file)
     for (const chunk of chunks) {
       expect(chunk.header).toContain('lang:python')
     }
   })
 
-  it('chunking sample.py produces a chunk for get_all_users with kind function (decorated function)', async () => {
+  it.skipIf(() => !parserAvailable)('chunking sample.py produces a chunk for get_all_users with kind function (decorated function)', async () => {
     const content = readFileSync(resolve(FIXTURES, 'sample.py'), 'utf8')
     const file = makeFile(content, 'python', 'test/fixtures/sample.py')
-    const parser = await getParser('python')
-    if (!parser) return
     const chunks = await chunker.chunk(file)
     // Short functions (< 150 chars) are merged into a module-level chunk.
     // Check for either a direct function chunk or a module chunk containing 'get_all_users'.
@@ -286,11 +262,9 @@ function test() {
 
   // --- Stage 6: PHP ---
 
-  it('chunking sample.php produces chunks with kind function, method, or class', async () => {
+  it.skipIf(() => !parserAvailable)('chunking sample.php produces chunks with kind function, method, or class', async () => {
     const content = readFileSync(resolve(FIXTURES, 'sample.php'), 'utf8')
     const file = makeFile(content, 'php', 'test/fixtures/sample.php')
-    const parser = await getParser('php')
-    if (!parser) return
     const chunks = await chunker.chunk(file)
     expect(chunks.length).toBeGreaterThanOrEqual(1)
     const kindedChunks = chunks.filter(
@@ -301,11 +275,9 @@ function test() {
 
   // --- Stage 6: Vue ---
 
-  it('chunking sample.vue produces chunks from the script block with lang:vue', async () => {
+  it.skipIf(() => !parserAvailable)('chunking sample.vue produces chunks from the script block with lang:vue', async () => {
     const content = readFileSync(resolve(FIXTURES, 'sample.vue'), 'utf8')
     const file = makeFile(content, 'vue', 'test/fixtures/sample.vue')
-    const tsParser = await getParser('typescript')
-    if (!tsParser) return
     const chunks = await chunker.chunk(file)
     expect(chunks.length).toBeGreaterThanOrEqual(1)
     for (const chunk of chunks) {
@@ -314,11 +286,9 @@ function test() {
     }
   })
 
-  it('Vue chunks have correct startLine offset accounting for template lines above', async () => {
+  it.skipIf(() => !parserAvailable)('Vue chunks have correct startLine offset accounting for template lines above', async () => {
     const content = readFileSync(resolve(FIXTURES, 'sample.vue'), 'utf8')
     const file = makeFile(content, 'vue', 'test/fixtures/sample.vue')
-    const tsParser = await getParser('typescript')
-    if (!tsParser) return
     const chunks = await chunker.chunk(file)
     // The <script> block starts after the <template> block (lines 1-3) and a blank line (line 4)
     // So all script-derived chunks must have startLine > 4
@@ -327,15 +297,13 @@ function test() {
     }
   })
 
-  it('Vue formatMessage chunk has startLine === 10 (pinned line offset check)', async () => {
+  it.skipIf(() => !parserAvailable)('Vue formatMessage chunk has startLine === 10 (pinned line offset check)', async () => {
     // sample.vue: <template> is lines 1-3, blank line 4, <script lang="ts"> opens line 5,
     // script content starts line 6, formatMessage is the 5th line of script content → line 10
     // Short functions (< 150 chars) are merged into a module-level chunk.
     // The merged chunk covers from the first tiny symbol to the last.
     const content = readFileSync(resolve(FIXTURES, 'sample.vue'), 'utf8')
     const file = makeFile(content, 'vue', 'test/fixtures/sample.vue')
-    const tsParser = await getParser('typescript')
-    if (!tsParser) return
     const chunks = await chunker.chunk(file)
     // Accept a direct function chunk at line 10 OR a module chunk that contains 'formatMessage'
     // and has startLine <= 10 (because tiny symbols from this file are merged together)

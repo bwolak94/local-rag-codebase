@@ -35,9 +35,10 @@ export const RagConfigSchema = z.object({
     kVector: z.number().default(20),
     kFts: z.number().default(20),
     kFinal: z.number().default(8),
+    rrfK: z.number().int().positive().default(60),
     expandDepth: z.number().default(1),
     rewrite: z.boolean().default(false),
-    rerank: z.enum(['none', 'llm', 'cross-encoder']).default('none'),
+    rerank: z.enum(['none', 'llm']).default('none'),
     hydeTemperature: z.number().min(0).max(1).default(0.0),
   }).default({}),
   store: z.object({

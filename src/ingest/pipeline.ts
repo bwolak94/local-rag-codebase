@@ -7,7 +7,7 @@ import { getParser } from '../chunking/treesitter.js'
 import { SlidingWindowChunker } from '../chunking/fallback.js'
 import { SQLiteSymbolIndex } from '../symbols/index.js'
 import { extractSymbols } from '../symbols/extractor.js'
-import { ModelMismatchError } from '../store/lancedb.js'
+import { ModelMismatchError } from '../store/errors.js'
 import type { Embedder, Store, EmbeddedChunk, SourceFile, SymbolIndex } from '../types/index.js'
 import type { RagConfig } from '../config/schema.js'
 
@@ -15,6 +15,7 @@ interface FileRecord {
   path: string
   hash: string
   indexedAt: number
+  embed_model: string
 }
 
 export class IndexPipeline {
@@ -34,9 +35,16 @@ export class IndexPipeline {
       CREATE TABLE IF NOT EXISTS files (
         path TEXT PRIMARY KEY,
         hash TEXT NOT NULL,
-        indexedAt INTEGER NOT NULL
+        indexedAt INTEGER NOT NULL,
+        embed_model TEXT NOT NULL DEFAULT ''
       )
     `)
+    // Migration: add embed_model column to existing databases that predate this schema change
+    try {
+      this.db.exec(`ALTER TABLE files ADD COLUMN embed_model TEXT NOT NULL DEFAULT ''`)
+    } catch {
+      // Column already exists — safe to ignore
+    }
     this.initChunkHashes()
     this.symbolIndex = new SQLiteSymbolIndex(config.store.path, config.root)
   }
@@ -75,9 +83,9 @@ export class IndexPipeline {
   private upsertRecord(path: string, hash: string): void {
     this.db
       .prepare(
-        'INSERT INTO files (path, hash, indexedAt) VALUES (?, ?, ?) ON CONFLICT(path) DO UPDATE SET hash=excluded.hash, indexedAt=excluded.indexedAt',
+        'INSERT INTO files (path, hash, indexedAt, embed_model) VALUES (?, ?, ?, ?) ON CONFLICT(path) DO UPDATE SET hash=excluded.hash, indexedAt=excluded.indexedAt, embed_model=excluded.embed_model',
       )
-      .run(path, hash, Date.now())
+      .run(path, hash, Date.now(), this.config.embedding.model)
   }
 
   private deleteRecord(path: string): void {
@@ -109,12 +117,21 @@ export class IndexPipeline {
       // Delete all vectors from the store before clearing the tracking table so
       // stale chunks do not remain in LanceDB after a full rebuild.
       const oldPaths = this.getAllPaths()
-      for (const p of oldPaths) {
-        await this.store.deleteByPath(p)
-        await this.symbolIndex.deleteByPath(p)
-        this.deleteChunkHashesForPath(p)
+      // Track all paths that need deletion; only clear the files table after
+      // all vector store deletes succeed (compensation pattern).
+      const pendingDeletes = new Set<string>(oldPaths)
+      try {
+        for (const p of pendingDeletes) {
+          await this.store.deleteByPath(p)
+          await this.symbolIndex.deleteByPath(p)
+          this.deleteChunkHashesForPath(p)
+        }
+        this.db.exec('DELETE FROM files')
+        this.db.exec('VACUUM')
+      } catch (err) {
+        console.warn('[IndexPipeline] Full reindex interrupted. Run with --full again to ensure consistency.')
+        throw err
       }
-      this.db.exec('DELETE FROM files')
     }
 
     const allFiles = await collectFiles(

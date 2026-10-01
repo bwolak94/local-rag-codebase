@@ -5,7 +5,9 @@ export function contentHash(s: string): string {
 }
 
 export function chunkHash(header: string, content: string): string {
-  return createHash('sha256').update(header + content).digest('hex')
+  // Use a null-byte separator to prevent header+content boundary collisions
+  // e.g. chunkHash('AB', '') must differ from chunkHash('A', 'B')
+  return createHash('sha256').update(header + '\0' + content).digest('hex')
 }
 
 export function chunkId(path: string, symbol: string | undefined, startLine: number): string {

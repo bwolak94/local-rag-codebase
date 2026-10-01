@@ -83,6 +83,7 @@ export class LanceDBStore implements Store {
     if (!names.includes(CHUNKS_TABLE)) {
       const tbl = await db.createTable(CHUNKS_TABLE, rows)
       await tbl.createIndex('content', { config: Index.fts(), replace: true })
+      await tbl.createIndex('header', { config: Index.fts(), replace: true })
     } else {
       const tbl = await db.openTable(CHUNKS_TABLE)
       // upsert by merging on id

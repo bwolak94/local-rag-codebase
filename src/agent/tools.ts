@@ -91,7 +91,11 @@ export function readFile(
     const lines = readFileSync(abs, 'utf8').split('\n')
     const start = (input.start ?? 1) - 1
     const end = input.end ?? lines.length
-    return lines.slice(start, end).join('\n')
+    const MAX_LINES = 500
+    const slicedLines = lines.slice(start, Math.min(end, start + MAX_LINES))
+    const truncated = end - start > MAX_LINES
+    const output = slicedLines.join('\n') + (truncated ? '\n\n[...truncated — use start/end params to read specific sections]' : '')
+    return output
   } catch {
     return `Error: cannot read ${input.path}`
   }

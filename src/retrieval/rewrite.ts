@@ -1,7 +1,7 @@
 import { Ollama } from 'ollama'
 import type { ChatTurn } from '../types/index.js'
 
-const clientCache = new Map<string, Ollama>()
+export const clientCache = new Map<string, Ollama>()
 function getClient(host: string): Ollama {
   if (!clientCache.has(host)) clientCache.set(host, new Ollama({ host }))
   return clientCache.get(host)!

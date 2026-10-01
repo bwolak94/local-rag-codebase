@@ -100,13 +100,13 @@ describe('HybridRetriever', () => {
   })
 
   it('calls embedder.embed with mode query', async () => {
-    const retriever = new HybridRetriever(store, embedder, 20, 20)
+    const retriever = new HybridRetriever(store, embedder, { kVector: 20, kFts: 20 })
     await retriever.retrieve('test query', { k: 8 })
     expect(embedder.embed).toHaveBeenCalledWith(['test query'], 'query')
   })
 
   it('calls both store.vectorSearch and store.textSearch in parallel', async () => {
-    const retriever = new HybridRetriever(store, embedder, 20, 20)
+    const retriever = new HybridRetriever(store, embedder, { kVector: 20, kFts: 20 })
     await retriever.retrieve('test query', { k: 8 })
     expect(store.vectorSearch).toHaveBeenCalled()
     expect(store.textSearch).toHaveBeenCalled()
@@ -118,7 +118,7 @@ describe('HybridRetriever', () => {
     vi.mocked(store.vectorSearch).mockResolvedValue(vectorResults)
     vi.mocked(store.textSearch).mockResolvedValue(ftsResults)
 
-    const retriever = new HybridRetriever(store, embedder, 20, 20)
+    const retriever = new HybridRetriever(store, embedder, { kVector: 20, kFts: 20 })
     const result = await retriever.retrieve('test', { k: 8 })
 
     // Result should have fused source after RRF
@@ -132,7 +132,7 @@ describe('HybridRetriever', () => {
     vi.mocked(store.vectorSearch).mockResolvedValue(manyResults.slice(0, 50))
     vi.mocked(store.textSearch).mockResolvedValue(manyResults.slice(50, 100))
 
-    const retriever = new HybridRetriever(store, embedder, 20, 20)
+    const retriever = new HybridRetriever(store, embedder, { kVector: 20, kFts: 20 })
     const result = await retriever.retrieve('test', { k: 10 })
 
     expect(result.length).toBeLessThanOrEqual(10)
@@ -143,7 +143,7 @@ describe('HybridRetriever', () => {
     const expandMock = vi.mocked(expandChunks)
     expandMock.mockClear()
 
-    const retriever = new HybridRetriever(store, embedder, 20, 20, symbolIndex)
+    const retriever = new HybridRetriever(store, embedder, { kVector: 20, kFts: 20, symbolIndex })
     await retriever.retrieve('test', { k: 8, expand: false })
 
     expect(expandMock).not.toHaveBeenCalled()
@@ -159,7 +159,7 @@ describe('HybridRetriever', () => {
     vi.mocked(store.vectorSearch).mockResolvedValue(vectorResults)
     vi.mocked(store.textSearch).mockResolvedValue([])
 
-    const retriever = new HybridRetriever(store, embedder, 20, 20, symbolIndex)
+    const retriever = new HybridRetriever(store, embedder, { kVector: 20, kFts: 20, symbolIndex })
     await retriever.retrieve('test', { k: 8, expand: true })
 
     expect(expandMock).toHaveBeenCalled()
@@ -170,7 +170,7 @@ describe('HybridRetriever', () => {
     const expandMock = vi.mocked(expandChunks)
     expandMock.mockClear()
 
-    const retriever = new HybridRetriever(store, embedder, 20, 20) // no symbolIndex
+    const retriever = new HybridRetriever(store, embedder, { kVector: 20, kFts: 20 }) // no symbolIndex
     await retriever.retrieve('test', { k: 8, expand: true })
 
     expect(expandMock).not.toHaveBeenCalled()
@@ -180,14 +180,14 @@ describe('HybridRetriever', () => {
     vi.mocked(store.vectorSearch).mockResolvedValue([])
     vi.mocked(store.textSearch).mockResolvedValue([])
 
-    const retriever = new HybridRetriever(store, embedder, 20, 20)
+    const retriever = new HybridRetriever(store, embedder, { kVector: 20, kFts: 20 })
     const result = await retriever.retrieve('test', { k: 8 })
 
     expect(result).toEqual([])
   })
 
   it('filter is forwarded to vectorSearch', async () => {
-    const retriever = new HybridRetriever(store, embedder, 20, 20)
+    const retriever = new HybridRetriever(store, embedder, { kVector: 20, kFts: 20 })
     const filter = { pathPrefix: 'src/', lang: ['typescript'] }
     await retriever.retrieve('test', { k: 8, filter })
 
@@ -199,7 +199,7 @@ describe('HybridRetriever', () => {
   })
 
   it('filter is forwarded to textSearch', async () => {
-    const retriever = new HybridRetriever(store, embedder, 20, 20)
+    const retriever = new HybridRetriever(store, embedder, { kVector: 20, kFts: 20 })
     const filter = { pathPrefix: 'src/utils' }
     await retriever.retrieve('test', { k: 8, filter })
 
@@ -211,7 +211,7 @@ describe('HybridRetriever', () => {
   })
 
   it('uses kVector for vectorSearch limit', async () => {
-    const retriever = new HybridRetriever(store, embedder, 35, 20)
+    const retriever = new HybridRetriever(store, embedder, { kVector: 35, kFts: 20 })
     await retriever.retrieve('test', { k: 8 })
 
     expect(store.vectorSearch).toHaveBeenCalledWith(
@@ -222,7 +222,7 @@ describe('HybridRetriever', () => {
   })
 
   it('uses kFts for textSearch limit', async () => {
-    const retriever = new HybridRetriever(store, embedder, 20, 45)
+    const retriever = new HybridRetriever(store, embedder, { kVector: 20, kFts: 45 })
     await retriever.retrieve('test', { k: 8 })
 
     expect(store.textSearch).toHaveBeenCalledWith(
@@ -242,7 +242,7 @@ describe('HybridRetriever', () => {
     vi.mocked(store.vectorSearch).mockResolvedValue(vectorResults)
     vi.mocked(store.textSearch).mockResolvedValue([])
 
-    const retriever = new HybridRetriever(store, embedder, 20, 20, symbolIndex, 4096, 2)
+    const retriever = new HybridRetriever(store, embedder, { kVector: 20, kFts: 20, symbolIndex, expandMaxTokens: 4096, expandDepth: 2 })
     await retriever.retrieve('test', { k: 8, expand: true })
 
     expect(expandMock).toHaveBeenCalledWith(
@@ -274,9 +274,11 @@ describe('HybridRetriever', () => {
         kVector: 20,
         kFts: 20,
         kFinal: 8,
+        rrfK: 60,
         expandDepth: 1,
         rewrite: false,
         rerank: 'none',
+        hydeTemperature: 0.0,
         ...retrieval,
       },
       store: { driver: 'lancedb', path: '.rag' },
@@ -293,7 +295,7 @@ describe('HybridRetriever', () => {
     vi.mocked(store.textSearch).mockResolvedValue([])
 
     const config = makeFullConfig({ rewrite: true, rerank: 'none' })
-    const retriever = new HybridRetriever(store, embedder, 20, 20, undefined, undefined, 1, config)
+    const retriever = new HybridRetriever(store, embedder, { kVector: 20, kFts: 20, expandDepth: 1 }, config)
     await retriever.retrieve('test query', { k: 8 })
 
     expect(expandQueryMock).toHaveBeenCalled()
@@ -309,7 +311,7 @@ describe('HybridRetriever', () => {
     vi.mocked(store.textSearch).mockResolvedValue([makeChunk('t1', 0.8)])
 
     const config = makeFullConfig({ rewrite: true, rerank: 'none' })
-    const retriever = new HybridRetriever(store, embedder, 20, 20, undefined, undefined, 1, config)
+    const retriever = new HybridRetriever(store, embedder, { kVector: 20, kFts: 20, expandDepth: 1 }, config)
 
     // Should NOT throw
     const result = await retriever.retrieve('test query', { k: 8 })
@@ -325,7 +327,7 @@ describe('HybridRetriever', () => {
     vi.mocked(store.textSearch).mockResolvedValue([])
 
     const config = makeFullConfig({ rerank: 'llm', rewrite: false })
-    const retriever = new HybridRetriever(store, embedder, 20, 20, undefined, undefined, 1, config)
+    const retriever = new HybridRetriever(store, embedder, { kVector: 20, kFts: 20, expandDepth: 1 }, config)
     await retriever.retrieve('test query', { k: 8 })
 
     expect(rerankMock).toHaveBeenCalled()

@@ -1,17 +1,20 @@
 import type { ScoredChunk, ChatTurn } from '../types/index.js'
 
 export function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 3.5)
+  return Math.ceil(text.length / 2.5)
 }
+
+const SYSTEM_PROMPT_OVERHEAD = 600
 
 export function allocateBudget(
   numCtx: number,
   contextFraction: number,
   historyFraction: number,
 ): { contextTokens: number; historyTokens: number } {
+  const available = Math.max(0, numCtx - SYSTEM_PROMPT_OVERHEAD)
   return {
-    contextTokens: Math.floor(numCtx * contextFraction),
-    historyTokens: Math.floor(numCtx * historyFraction),
+    contextTokens: Math.floor(available * contextFraction),
+    historyTokens: Math.floor(available * historyFraction),
   }
 }
 
@@ -21,8 +24,7 @@ export function trimContext(chunks: ScoredChunk[], maxTokens: number): ScoredChu
   // sort by score descending, keep highest-scored chunks first
   const sorted = [...chunks].sort((a, b) => b.score - a.score)
   for (const c of sorted) {
-    // 400 chars / 3.5 ≈ 114 tokens
-    const t = estimateTokens(c.chunk.header + c.chunk.content)
+    const t = estimateTokens(c.chunk.header + '\n' + c.chunk.content) + 90
     if (result.length > 0 && used + t > maxTokens) break
     result.push(c)
     used += t

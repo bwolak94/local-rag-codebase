@@ -33,11 +33,13 @@ export function register(program: Command) {
       const retriever = new HybridRetriever(
         store,
         embedder,
-        config.retrieval.kVector,
-        config.retrieval.kFts,
-        symbolIndex,
-        contextTokens,
-        config.retrieval.expandDepth,
+        {
+          kVector: config.retrieval.kVector,
+          kFts: config.retrieval.kFts,
+          symbolIndex,
+          expandMaxTokens: contextTokens,
+          expandDepth: config.retrieval.expandDepth,
+        },
         config,
       )
 
