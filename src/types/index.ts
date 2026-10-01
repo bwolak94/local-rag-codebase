@@ -71,6 +71,7 @@ export interface Embedder {
 export interface Store {
   upsert(chunks: EmbeddedChunk[]): Promise<void>
   deleteByPath(path: string): Promise<void>
+  deleteByIds(ids: string[]): Promise<void>
   vectorSearch(vector: number[], k: number, filter?: SearchFilter): Promise<ScoredChunk[]>
   textSearch(query: string, k: number, filter?: SearchFilter): Promise<ScoredChunk[]>
   getMeta(): Promise<{ embedModel: string; dim: number } | null>

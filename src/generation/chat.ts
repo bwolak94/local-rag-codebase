@@ -66,19 +66,23 @@ export class OllamaGenerator implements Generator {
     })
 
     let fullAnswer = ''
-    for await (const chunk of stream) {
-      const text = chunk.message.content
-      if (text) {
-        fullAnswer += text
-        yield text
+    try {
+      for await (const chunk of stream) {
+        const text = chunk.message.content
+        if (text) {
+          fullAnswer += text
+          yield text
+        }
       }
+    } catch (err) {
+      yield `\n[Error: stream interrupted — ${(err as Error).message}]`
     }
 
-    // After stream ends, validate citations and emit warnings if any
+    // After stream ends, validate citations and write warnings to stderr
     if (this.enableValidateCitations) {
       const warnings = validateCitations(fullAnswer, trimmedContext)
       if (warnings.length > 0) {
-        yield '\n\nWARNING: Citation warnings:\n' + warnings.map(w => `  - ${w}`).join('\n')
+        process.stderr.write('\nWARNING: Citation warnings:\n' + warnings.map(w => `  - ${w}`).join('\n') + '\n')
       }
     }
   }

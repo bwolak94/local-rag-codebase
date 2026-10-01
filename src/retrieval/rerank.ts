@@ -60,8 +60,7 @@ export async function rerank(
 ): Promise<ScoredChunk[]> {
   if (config.retrieval.rerank === 'llm') return rerankWithLLM(query, chunks, config, host)
   if (config.retrieval.rerank === 'cross-encoder') {
-    console.error('[rerank] cross-encoder is not yet implemented. Returning chunks unranked. Set rerank: "none" to suppress this message.')
-    return crossEncoderRerank(query, chunks)
+    throw new Error('cross-encoder reranking is not yet implemented. Use "llm" or "none".')
   }
   return chunks
 }

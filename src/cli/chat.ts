@@ -1,8 +1,8 @@
 import { Command } from 'commander'
 import * as readline from 'node:readline'
 import { loadConfig } from '../config/loader.js'
-import { OllamaEmbedder } from '../embedding/ollama.js'
-import { LanceDBStore } from '../store/lancedb.js'
+import { createEmbedder } from '../embedding/factory.js'
+import { createStore } from '../store/factory.js'
 import { SQLiteSymbolIndex } from '../symbols/index.js'
 import { HybridRetriever } from '../retrieval/hybrid.js'
 import { OllamaGenerator } from '../generation/chat.js'
@@ -20,8 +20,8 @@ export function register(program: Command) {
     .option('--no-rewrite', 'Disable question condensation for follow-ups')
     .action(async (opts) => {
       const config = loadConfig({}, opts.config)
-      const embedder = new OllamaEmbedder(config.embedding.model, config.embedding.batchSize)
-      const store = new LanceDBStore(config.store.path, config.root, config.embedding.model)
+      const embedder = createEmbedder(config)
+      const store = createStore(config)
       const symbolIndex = new SQLiteSymbolIndex(config.store.path, config.root)
       const { contextTokens } = allocateBudget(
         config.llm.numCtx,
@@ -36,7 +36,7 @@ export function register(program: Command) {
         contextTokens,
         config.retrieval.expandDepth,
       )
-      const generator = new OllamaGenerator(config)
+      const generator = new OllamaGenerator(config, config.llm.host)
       const history: ChatTurn[] = []
 
       const rl = readline.createInterface({

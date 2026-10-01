@@ -21,11 +21,13 @@ export function trimContext(chunks: ScoredChunk[], maxTokens: number): ScoredChu
   // sort by score descending, keep highest-scored chunks first
   const sorted = [...chunks].sort((a, b) => b.score - a.score)
   for (const c of sorted) {
+    // 400 chars / 3.5 ≈ 114 tokens
     const t = estimateTokens(c.chunk.header + c.chunk.content)
     if (result.length > 0 && used + t > maxTokens) break
     result.push(c)
     used += t
   }
+  result.sort((a, b) => a.chunk.path < b.chunk.path ? -1 : a.chunk.path > b.chunk.path ? 1 : a.chunk.startLine - b.chunk.startLine)
   return result
 }
 

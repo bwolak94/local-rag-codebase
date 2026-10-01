@@ -5,7 +5,13 @@ export class SlidingWindowChunker implements Chunker {
   constructor(
     private windowLines = 60,
     private overlapLines = 10,
-  ) {}
+  ) {
+    if (overlapLines >= windowLines) {
+      throw new Error(
+        `SlidingWindowChunker: overlapLines (${overlapLines}) must be less than windowLines (${windowLines})`
+      )
+    }
+  }
 
   supports(_file: SourceFile): boolean {
     return true // universal fallback

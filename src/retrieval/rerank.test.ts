@@ -213,15 +213,10 @@ describe('rerank', () => {
     expect(result[1]?.chunk.id).toBe('b')
   })
 
-  it('calls crossEncoderRerank (returns chunks unchanged) when config.retrieval.rerank is "cross-encoder"', async () => {
+  it('throws when config.retrieval.rerank is "cross-encoder" (not yet implemented)', async () => {
     const chunks = [makeChunk('a'), makeChunk('b')]
     const config = makeConfig('cross-encoder')
 
-    const result = await rerank('query', chunks, config)
-
-    // cross-encoder stub returns unchanged
-    expect(result).toEqual(chunks)
-    // no LLM call should be made
-    expect(mockGenerate).not.toHaveBeenCalled()
+    await expect(rerank('query', chunks, config)).rejects.toThrow('cross-encoder reranking is not yet implemented')
   })
 })

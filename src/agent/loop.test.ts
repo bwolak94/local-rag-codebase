@@ -86,13 +86,13 @@ describe('agentLoop', () => {
     mockChat.mockReset()
   })
 
-  it('returns answer and steps: 0 when LLM returns no tool calls immediately', async () => {
+  it('returns answer and steps: 1 when LLM returns no tool calls immediately', async () => {
     mockChat.mockResolvedValueOnce(finalResponse('The answer is 42.'))
 
     const result = await agentLoop('What is the answer?', makeCtx(), makeConfig())
 
     expect(result.answer).toBe('The answer is 42.')
-    expect(result.steps).toBe(0)
+    expect(result.steps).toBe(1)
     expect(result.toolsUsed).toEqual([])
   })
 
@@ -105,7 +105,7 @@ describe('agentLoop', () => {
     const result = await agentLoop('Where is rrf defined?', makeCtx(), makeConfig())
 
     expect(result.answer).toBe('The rrf function is in rrf.ts.')
-    expect(result.steps).toBe(1)
+    expect(result.steps).toBe(2)
     expect(result.toolsUsed).toEqual(['semantic_search'])
   })
 
@@ -145,7 +145,7 @@ describe('agentLoop', () => {
 
     // The loop must not throw — it must return an AgentResult
     expect(result.answer).toBe('Handled Zod error.')
-    expect(result.steps).toBe(1)
+    expect(result.steps).toBe(2)
     expect(result.toolsUsed).toEqual(['grep'])
   })
 
@@ -157,7 +157,7 @@ describe('agentLoop', () => {
 
     expect(result.answer).toBe('Unknown tool handled.')
     expect(result.toolsUsed).toEqual(['fly_to_moon'])
-    expect(result.steps).toBe(1)
+    expect(result.steps).toBe(2)
   })
 
   it('triggers graceful degradation when LLM throws on first call', async () => {
@@ -198,7 +198,7 @@ describe('agentLoop', () => {
     const result = await agentLoop('Explore hybrid retriever', makeCtx(), makeConfig())
 
     expect(result.toolsUsed).toEqual(['list_dir', 'grep', 'read_file'])
-    expect(result.steps).toBe(3)
+    expect(result.steps).toBe(4)
   })
 
   it('prepends history turns to the message list before the user question', async () => {
@@ -255,5 +255,26 @@ describe('agentLoop', () => {
 
     expect(result.toolsUsed).toEqual(['list_dir', 'find_symbol'])
     expect(result.steps).toBe(2)
+  })
+
+  it('normalises JSON-string tool arguments to objects', async () => {
+    // Model returns tool call with arguments as a JSON string (not an object)
+    mockChat.mockResolvedValueOnce({
+      message: {
+        role: 'assistant',
+        content: '',
+        tool_calls: [{ function: { name: 'semantic_search', arguments: '{"query":"rrf algorithm"}' } }],
+      },
+    })
+    // After tool execution, model returns final answer
+    mockChat.mockResolvedValueOnce(finalResponse('Found the rrf algorithm.'))
+
+    const ctx = makeCtx()
+    const result = await agentLoop('Where is rrf?', ctx, makeConfig())
+
+    // The tool should have been called with the parsed object
+    expect(result.answer).toBe('Found the rrf algorithm.')
+    expect(result.steps).toBe(2)
+    expect(result.toolsUsed).toEqual(['semantic_search'])
   })
 })

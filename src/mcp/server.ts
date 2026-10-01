@@ -4,7 +4,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js'
-import { z } from 'zod'
+import { zodToJsonSchema } from 'zod-to-json-schema'
 import {
   SemanticSearchInput, GrepInput, ReadFileInput,
   FindSymbolInput, GetReferencesInput, ListDirInput,
@@ -100,42 +100,3 @@ export async function startMCPServer(config: RagConfig, ctx: ToolContext): Promi
   // blocks until client disconnects
 }
 
-// minimal zod-to-json-schema for object types (covers our tool schemas)
-function zodToJsonSchema(schema: z.ZodObject<z.ZodRawShape>): object {
-  const shape = schema.shape
-  const properties: Record<string, unknown> = {}
-  const required: string[] = []
-
-  for (const [key, field] of Object.entries(shape)) {
-    const f = field as z.ZodTypeAny
-    properties[key] = zodFieldToJson(f)
-    if (!(f instanceof z.ZodOptional) && !(f instanceof z.ZodDefault)) {
-      required.push(key)
-    }
-  }
-
-  return { type: 'object', properties, required }
-}
-
-function zodFieldToJson(field: z.ZodTypeAny): object {
-  if (field instanceof z.ZodString) {
-    return { type: 'string', ...(field.description ? { description: field.description } : {}) }
-  }
-  if (field instanceof z.ZodNumber) {
-    const checks = (field as z.ZodNumber)._def.checks
-    const schema: Record<string, unknown> = { type: 'number' }
-    if (field.description) schema['description'] = field.description
-    for (const check of checks) {
-      if (check.kind === 'min') schema['minimum'] = check.value
-      if (check.kind === 'max') schema['maximum'] = check.value
-      if (check.kind === 'int') schema['multipleOf'] = 1
-    }
-    return schema
-  }
-  if (field instanceof z.ZodBoolean) {
-    return { type: 'boolean', ...(field.description ? { description: field.description } : {}) }
-  }
-  if (field instanceof z.ZodOptional) return zodFieldToJson(field.unwrap())
-  if (field instanceof z.ZodDefault) return zodFieldToJson(field.removeDefault())
-  return { type: 'string' }
-}

@@ -1,13 +1,10 @@
 import * as lancedb from '@lancedb/lancedb'
+import { Index } from '@lancedb/lancedb'
 import { resolve } from 'node:path'
 import type { EmbeddedChunk, ScoredChunk, SearchFilter, Store } from '../types/index.js'
+import { ModelMismatchError } from './errors.js'
 
-export class ModelMismatchError extends Error {
-  constructor(stored: string, current: string) {
-    super(`Embedding model mismatch: index was built with "${stored}", current model is "${current}". Run \`rag index --full\` to rebuild.`)
-    this.name = 'ModelMismatchError'
-  }
-}
+export { ModelMismatchError }
 
 const META_TABLE = 'index_meta'
 const CHUNKS_TABLE = 'chunks'
@@ -84,7 +81,8 @@ export class LanceDBStore implements Store {
     }))
 
     if (!names.includes(CHUNKS_TABLE)) {
-      await db.createTable(CHUNKS_TABLE, rows)
+      const tbl = await db.createTable(CHUNKS_TABLE, rows)
+      await tbl.createIndex('content', { config: Index.fts(), replace: true })
     } else {
       const tbl = await db.openTable(CHUNKS_TABLE)
       // upsert by merging on id
@@ -94,11 +92,14 @@ export class LanceDBStore implements Store {
         .execute(rows)
     }
 
-    // persist meta from first chunk's vector length — always update so --full reindex is reflected
-    const firstChunk = chunks[0]
-    if (firstChunk !== undefined) {
-      const dim = firstChunk.vector.length
-      await this.setMeta(this.embedModel, dim)
+    // persist meta only on first upsert (meta === null); --full reindex drops the table so getMeta() returns null
+    const meta = await this.getMeta()
+    if (meta === null) {
+      const firstChunk = chunks[0]
+      if (firstChunk !== undefined) {
+        const dim = firstChunk.vector.length
+        await this.setMeta(this.embedModel, dim)
+      }
     }
   }
 
@@ -114,6 +115,20 @@ export class LanceDBStore implements Store {
     }
   }
 
+  async deleteByIds(ids: string[]): Promise<void> {
+    if (ids.length === 0) return
+    try {
+      const db = await this.connect()
+      const names = await db.tableNames()
+      if (!names.includes(CHUNKS_TABLE)) return
+      const tbl = await db.openTable(CHUNKS_TABLE)
+      const escaped = ids.map(id => `'${id.replace(/'/g, "''")}'`).join(', ')
+      await tbl.delete(`id IN (${escaped})`)
+    } catch {
+      // table may not exist yet
+    }
+  }
+
   async vectorSearch(vector: number[], k: number, filter?: SearchFilter): Promise<ScoredChunk[]> {
     await this.checkMeta(this.embedModel, vector.length)
     try {
@@ -121,7 +136,7 @@ export class LanceDBStore implements Store {
       const names = await db.tableNames()
       if (!names.includes(CHUNKS_TABLE)) return []
       const tbl = await db.openTable(CHUNKS_TABLE)
-      let q = tbl.vectorSearch(vector).limit(k)
+      let q = tbl.vectorSearch(vector).distanceType('cosine').limit(k)
       if (filter?.pathPrefix) {
         const safePrefix = filter.pathPrefix.replace(/'/g, "''")
         q = q.where(`path LIKE '${safePrefix}%'`)
@@ -168,7 +183,7 @@ export class LanceDBStore implements Store {
       const rows = await q.toArray()
       return rows.map(r => ({
         chunk: rowToChunk(r),
-        score: Number(r['_score'] ?? 0),
+        score: Math.min(1, Number(r['_score'] ?? 0) / 10),
         source: 'fts' as const,
       }))
     } catch {

@@ -2,8 +2,8 @@ import { Command } from 'commander'
 import chokidar from 'chokidar'
 import { resolve, relative } from 'node:path'
 import { loadConfig } from '../config/loader.js'
-import { OllamaEmbedder } from '../embedding/ollama.js'
-import { LanceDBStore } from '../store/lancedb.js'
+import { createEmbedder } from '../embedding/factory.js'
+import { createStore } from '../store/factory.js'
 import { IndexPipeline } from '../ingest/pipeline.js'
 
 export function register(program: Command) {
@@ -13,8 +13,8 @@ export function register(program: Command) {
     .option('--config <path>', 'Path to .ragconfig.json')
     .action(async (opts) => {
       const config = loadConfig({}, opts.config)
-      const store = new LanceDBStore(config.store.path, config.root, config.embedding.model)
-      const embedder = new OllamaEmbedder(config.embedding.model, config.embedding.batchSize)
+      const store = createStore(config)
+      const embedder = createEmbedder(config)
       const pipeline = new IndexPipeline(config, store, embedder)
 
       // initial full incremental index

@@ -1,6 +1,11 @@
 import { Ollama } from 'ollama'
 import type { Embedder } from '../types/index.js'
 
+function l2Normalize(v: number[]): number[] {
+  const norm = Math.sqrt(v.reduce((s, x) => s + x * x, 0))
+  return norm === 0 ? v : v.map(x => x / norm)
+}
+
 const TASK_PREFIXES: Record<string, string> = {
   'nomic-embed-text': 'search_document: ',
   'bge-m3': '',
@@ -36,7 +41,7 @@ export class OllamaEmbedder implements Embedder {
     for (let i = 0; i < prefixed.length; i += this.batchSize) {
       const batch = prefixed.slice(i, i + this.batchSize)
       const res = await this.client.embed({ model: this.model, input: batch })
-      results.push(...res.embeddings)
+      results.push(...res.embeddings.map(l2Normalize))
     }
 
     if (results[0] !== undefined && this._dim === 0) {

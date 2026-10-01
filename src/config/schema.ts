@@ -22,6 +22,7 @@ export const RagConfigSchema = z.object({
   embedding: z.object({
     model: z.string().default('nomic-embed-text'),
     batchSize: z.number().default(48),
+    host: z.string().default('http://localhost:11434'),
   }).default({}),
   llm: z.object({
     model: z.string().default('qwen2.5-coder:14b'),
@@ -37,6 +38,7 @@ export const RagConfigSchema = z.object({
     expandDepth: z.number().default(1),
     rewrite: z.boolean().default(false),
     rerank: z.enum(['none', 'llm', 'cross-encoder']).default('none'),
+    hydeTemperature: z.number().min(0).max(1).default(0.0),
   }).default({}),
   store: z.object({
     driver: z.enum(['lancedb', 'sqlite']).default('lancedb'),

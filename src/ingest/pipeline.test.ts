@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { IndexPipeline } from './pipeline.js'
+import { ModelMismatchError } from '../store/lancedb.js'
 import type { Store, Embedder, SourceFile, Chunk } from '../types/index.js'
 import type { RagConfig } from '../config/schema.js'
 import { tmpdir } from 'node:os'
@@ -169,6 +170,54 @@ describe('IndexPipeline', () => {
 
     // restore
     mockedCollect.mockResolvedValue([])
+  })
+
+  it('throws ModelMismatchError when stored embedModel mismatches', async () => {
+    const store = mockStore()
+    const embedder = mockEmbedder()
+    const config = testConfig(tmpDir)
+
+    // Stub getMeta to return a different embedModel than config uses
+    vi.mocked(store.getMeta).mockResolvedValueOnce({
+      embedModel: 'old-model',
+      dim: 768,
+    })
+
+    const pipeline = new IndexPipeline(config, store, embedder)
+
+    // pipeline.run() should reject with ModelMismatchError
+    await expect(pipeline.run()).rejects.toThrow(ModelMismatchError)
+  })
+
+  it('throws when embedder returns wrong vector count', async () => {
+    const store = mockStore()
+    const embedder = mockEmbedder()
+    const config = testConfig(tmpDir)
+
+    // getMeta returns null (no mismatch)
+    vi.mocked(store.getMeta).mockResolvedValueOnce(null)
+
+    // Mock collectFiles to return a single file
+    const { collectFiles } = await import('./walker.js')
+    const mockedCollect = vi.mocked(collectFiles)
+    const fakeFile: SourceFile = {
+      path: 'src/test.ts',
+      lang: 'typescript',
+      content: 'export const x = 1; export const y = 2;',
+      hash: 'testhash',
+    }
+    mockedCollect.mockResolvedValueOnce([fakeFile])
+
+    // Stub embedder to return fewer vectors than chunks
+    // Assume the chunker will produce 2+ chunks, but embedder returns only 1 vector
+    vi.mocked(embedder.embed).mockResolvedValueOnce([[0.1, 0.2, 0.3, 0.4]])
+
+    const pipeline = new IndexPipeline(config, store, embedder)
+
+    // pipeline.run() should reject with an error containing "vectors"
+    await expect(pipeline.run()).rejects.toThrow(/vectors/)
+
+    mockedCollect.mockResolvedValueOnce([])
   })
 
   it('run() creates chunk_hashes table', () => {

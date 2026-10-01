@@ -62,6 +62,7 @@ function mockStore(): Store {
   return {
     upsert: vi.fn().mockResolvedValue(undefined),
     deleteByPath: vi.fn().mockResolvedValue(undefined),
+    deleteByIds: vi.fn().mockResolvedValue(undefined),
     vectorSearch: vi.fn().mockResolvedValue([]),
     textSearch: vi.fn().mockResolvedValue([]),
     getMeta: vi.fn().mockResolvedValue(null),

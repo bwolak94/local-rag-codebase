@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url'
 import { readFileSync } from 'node:fs'
 import { chunkHash, chunkId } from '../ingest/hasher.js'
 import { SlidingWindowChunker } from './fallback.js'
-import type { Chunk, ChunkKind, Chunker, SourceFile } from '../types/index.js'
+import { kindFromNodeType } from './kinds.js'
+import type { Chunk, Chunker, SourceFile } from '../types/index.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -109,16 +110,6 @@ function extractImports(rootNode: Parser.SyntaxNode): string[] {
   return imports.slice(0, 6) // cap at 6 to avoid blowing the header size
 }
 
-function kindFromNodeType(type: string): ChunkKind {
-  if (type.includes('function_definition')) return 'function'
-  if (type.includes('function')) return 'function'
-  if (type.includes('method')) return 'method'
-  if (type.includes('class')) return 'class'
-  if (type.includes('interface')) return 'interface'
-  if (type.includes('type_alias')) return 'type'
-  return 'module'
-}
-
 const fallback = new SlidingWindowChunker()
 
 export class TreeSitterChunker implements Chunker {
@@ -132,37 +123,50 @@ export class TreeSitterChunker implements Chunker {
   }
 
   private async chunkVue(file: SourceFile): Promise<Chunk[]> {
-    const re = /(<script[^>]*>)([\s\S]*?)(<\/script>)/i
-    const match = re.exec(file.content)
-    if (!match) return fallback.chunk(file)
+    const re = /(<script([^>]*)>)([\s\S]*?)<\/script>/gi
+    const allChunks: Chunk[] = []
 
-    const openTag = match[1] ?? ''
-    const scriptContent = match[2] ?? ''
-    const isTs = /lang=["']ts["']/.test(openTag)
-    const scriptLang = isTs ? 'typescript' : 'javascript'
+    for (const match of file.content.matchAll(re)) {
+      const openTag = match[1] ?? ''
+      const scriptContent = match[3] ?? ''
+      const isTs = /lang=["']ts["']/.test(openTag)
+      const scriptLang = isTs ? 'typescript' : 'javascript'
 
-    // use match.index + openTag.length to find exact script content start
-    const scriptStart = match.index + openTag.length
-    const lineOffset = (file.content.slice(0, scriptStart).match(/\n/g) ?? []).length
+      // use match.index + openTag.length to find exact script content start
+      const scriptStart = (match.index ?? 0) + openTag.length
+      const lineOffset = (file.content.slice(0, scriptStart).match(/\n/g) ?? []).length
 
-    const syntheticFile: SourceFile = {
-      path: file.path,
-      lang: scriptLang,
-      content: scriptContent,
-      hash: file.hash,
+      const syntheticFile: SourceFile = {
+        path: file.path,
+        lang: scriptLang,
+        content: scriptContent,
+        hash: file.hash,
+      }
+
+      const innerChunks = await this.chunkInner(syntheticFile)
+
+      // adjust line offsets and fix lang back to vue
+      const adjusted = innerChunks.map(c => {
+        const startLine = c.startLine + lineOffset
+        const endLine = c.endLine + lineOffset
+        const header = c.header.replace(`lang:${scriptLang}`, 'lang:vue')
+        return {
+          ...c,
+          path: file.path,
+          lang: 'vue',
+          startLine,
+          endLine,
+          header,
+          id: chunkId(file.path, c.symbol, startLine),
+          hash: chunkHash(header, c.content),
+        }
+      })
+
+      allChunks.push(...adjusted)
     }
 
-    const innerChunks = await this.chunkInner(syntheticFile)
-
-    // adjust line offsets and fix lang back to vue
-    return innerChunks.map(c => ({
-      ...c,
-      path: file.path,
-      lang: 'vue',
-      startLine: c.startLine + lineOffset,
-      endLine: c.endLine + lineOffset,
-      header: c.header.replace(`lang:${scriptLang}`, 'lang:vue'),
-    }))
+    if (allChunks.length === 0) return fallback.chunk(file)
+    return allChunks
   }
 
   private async chunkInner(file: SourceFile): Promise<Chunk[]> {
@@ -262,23 +266,44 @@ export class TreeSitterChunker implements Chunker {
       }
     }
 
-    // merge all tiny symbols into a single module-level chunk
+    // merge contiguous tiny symbols into per-group module-level chunks
     if (tinyChunks.length > 0) {
-      const merged = tinyChunks.map(c => c.content).join('\n\n')
-      const firstTiny = tinyChunks[0]!
-      const lastTiny = tinyChunks[tinyChunks.length - 1]!
-      const mergedHeader = `file:${file.path} kind:module lang:${file.lang} lines:${firstTiny.startLine}-${lastTiny.endLine}`
-      normalChunks.push({
-        id: chunkId(file.path, undefined, firstTiny.startLine),
-        path: file.path,
-        lang: file.lang,
-        kind: 'module',
-        startLine: firstTiny.startLine,
-        endLine: lastTiny.endLine,
-        header: mergedHeader,
-        content: merged,
-        hash: chunkHash(mergedHeader, merged),
-      })
+      // Sort by startLine to ensure correct grouping
+      tinyChunks.sort((a, b) => a.startLine - b.startLine)
+
+      // Group into contiguous runs: adjacent if nextSymbol.startLine <= prevSymbol.endLine + 5
+      const groups: Chunk[][] = []
+      let currentGroup: Chunk[] = [tinyChunks[0]!]
+      for (let i = 1; i < tinyChunks.length; i++) {
+        const prev = currentGroup[currentGroup.length - 1]!
+        const curr = tinyChunks[i]!
+        if (curr.startLine <= prev.endLine + 5) {
+          currentGroup.push(curr)
+        } else {
+          groups.push(currentGroup)
+          currentGroup = [curr]
+        }
+      }
+      groups.push(currentGroup)
+
+      // Merge each contiguous group independently
+      for (const group of groups) {
+        const merged = group.map(c => c.content).join('\n\n')
+        const firstInGroup = group[0]!
+        const lastInGroup = group[group.length - 1]!
+        const mergedHeader = `file:${file.path} kind:module lang:${file.lang} lines:${firstInGroup.startLine}-${lastInGroup.endLine}`
+        normalChunks.push({
+          id: chunkId(file.path, undefined, firstInGroup.startLine),
+          path: file.path,
+          lang: file.lang,
+          kind: 'module',
+          startLine: firstInGroup.startLine,
+          endLine: lastInGroup.endLine,
+          header: mergedHeader,
+          content: merged,
+          hash: chunkHash(mergedHeader, merged),
+        })
+      }
     }
 
     // if no symbols found, fall back to sliding window

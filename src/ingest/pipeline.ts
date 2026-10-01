@@ -8,7 +8,7 @@ import { SlidingWindowChunker } from '../chunking/fallback.js'
 import { SQLiteSymbolIndex } from '../symbols/index.js'
 import { extractSymbols } from '../symbols/extractor.js'
 import { ModelMismatchError } from '../store/lancedb.js'
-import type { Embedder, Store, EmbeddedChunk, SourceFile } from '../types/index.js'
+import type { Embedder, Store, EmbeddedChunk, SourceFile, SymbolIndex } from '../types/index.js'
 import type { RagConfig } from '../config/schema.js'
 
 interface FileRecord {
@@ -19,7 +19,7 @@ interface FileRecord {
 
 export class IndexPipeline {
   private db: Database.Database
-  readonly symbolIndex: SQLiteSymbolIndex
+  readonly symbolIndex: SymbolIndex
 
   constructor(
     private config: RagConfig,

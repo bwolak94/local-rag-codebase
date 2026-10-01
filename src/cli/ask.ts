@@ -1,7 +1,7 @@
 import { Command } from 'commander'
 import { loadConfig } from '../config/loader.js'
-import { OllamaEmbedder } from '../embedding/ollama.js'
-import { LanceDBStore } from '../store/lancedb.js'
+import { createEmbedder } from '../embedding/factory.js'
+import { createStore } from '../store/factory.js'
 import { HybridRetriever } from '../retrieval/hybrid.js'
 import { OllamaGenerator } from '../generation/chat.js'
 import { SQLiteSymbolIndex } from '../symbols/index.js'
@@ -20,8 +20,8 @@ export function register(program: Command) {
     .option('--agent', 'Use agent loop with tool calling instead of single-shot retrieval')
     .action(async (question: string, opts) => {
       const config = loadConfig({}, opts.config)
-      const embedder = new OllamaEmbedder(config.embedding.model, config.embedding.batchSize)
-      const store = new LanceDBStore(config.store.path, config.root, config.embedding.model)
+      const embedder = createEmbedder(config)
+      const store = createStore(config)
       const symbolIndex = new SQLiteSymbolIndex(config.store.path, config.root)
 
       const { contextTokens } = allocateBudget(
@@ -43,11 +43,11 @@ export function register(program: Command) {
 
       if (opts.agent) {
         const toolCtx: ToolContext = { retriever, symbolIndex, root: config.root }
-        const result = await agentLoop(question, toolCtx, config)
+        const result = await agentLoop(question, toolCtx, config, [], config.llm.host)
         process.stdout.write('\n' + result.answer + '\n\n')
         console.log(`[agent] completed in ${result.steps} steps — tools: ${result.toolsUsed.join(', ') || 'none'}`)
       } else {
-        const generator = new OllamaGenerator(config)
+        const generator = new OllamaGenerator(config, config.llm.host)
 
         const k = parseInt(opts.k as string, 10)
         if (isNaN(k) || k < 1) {

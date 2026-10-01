@@ -145,7 +145,7 @@ describe('OllamaGenerator.answer()', () => {
     mockChat.mockReset()
   })
 
-  it('streams citation warnings after answer when validation is enabled', async () => {
+  it('emits citation warnings to stderr (not into the answer stream) when validation is enabled', async () => {
     // Answer references a file path NOT in the context chunks
     const answerTokens = ['See ', '[src/unknown.ts:1-10]', ' for details.']
     mockChat.mockResolvedValue(makeStream(answerTokens))
@@ -153,13 +153,19 @@ describe('OllamaGenerator.answer()', () => {
     const context = [makeContext('src/foo.ts', 1, 20)]
     const generator = new OllamaGenerator(makeConfig(), 'http://localhost:11434', true)
 
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+
     const tokens: string[] = []
     for await (const token of generator.answer('test question', context)) {
       tokens.push(token)
     }
 
+    stderrSpy.mockRestore()
+
     const fullOutput = tokens.join('')
-    expect(fullOutput).toContain('Citation warnings')
+    // warnings must NOT appear in the answer stream
+    expect(fullOutput).not.toContain('Citation warnings')
+    // answer stream still contains only the actual answer tokens
     expect(fullOutput).toContain('src/unknown.ts')
   })
 

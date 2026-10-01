@@ -9,9 +9,10 @@ const makeScored = (id: string, content: string, score: number): ScoredChunk => 
 })
 
 describe('allocateBudget', () => {
-  it('respects 60% context fraction', () => {
-    const { contextTokens } = allocateBudget(32768, 0.60, 0.20)
+  it('respects 60% context fraction and 20% history fraction', () => {
+    const { contextTokens, historyTokens } = allocateBudget(32768, 0.60, 0.20)
     expect(contextTokens).toBe(Math.floor(32768 * 0.60))
+    expect(historyTokens).toBe(Math.floor(32768 * 0.20))
   })
 })
 

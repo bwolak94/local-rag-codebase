@@ -164,9 +164,9 @@ function test() {
     const file = makeFile(content, 'text')
     const chunks = await chunker.chunk(file)
     // text lang is not supported — falls back to sliding window
-    expect(chunks.length).toBeGreaterThanOrEqual(0)
+    expect(chunks.length).toBeGreaterThan(0)
     const textChunks = chunks.filter(c => c.kind === 'text')
-    expect(textChunks.length).toBeGreaterThanOrEqual(0)
+    expect(textChunks.length).toBeGreaterThan(0)
   })
 
   it('falls back to SlidingWindowChunker for empty file', async () => {
@@ -174,8 +174,8 @@ function test() {
     const parser = await getParser('typescript')
     if (!parser) return
     const chunks = await chunker.chunk(file)
-    // Empty file should fall back (no symbols to extract)
-    expect(chunks).toBeDefined()
+    // Empty file should produce no chunks
+    expect(chunks).toHaveLength(0)
   })
 
   it('context header is prepended before embedding (tested via content)', async () => {

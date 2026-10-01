@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { detectLang, collectFiles } from './walker.js'
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 
 vi.mock('node:child_process', () => ({
   execSync: vi.fn(),
@@ -83,38 +86,106 @@ describe('detectLang', () => {
 })
 
 describe('collectFiles', () => {
-  it('filters out .env files (regex pattern test)', () => {
-    const patterns = [/\.env($|\.)/, /\.pem$/, /\.key$/, /\.p12$/, /\.pfx$/]
-    expect(patterns[0]!.test('.env')).toBe(true)
-    expect(patterns[0]!.test('.env.local')).toBe(true)
-    expect(patterns[0]!.test('src/.env')).toBe(true)
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'walker-test-'))
   })
 
-  it('filters out .pem files (regex pattern test)', () => {
-    const patterns = [/\.env($|\.)/, /\.pem$/, /\.key$/, /\.p12$/, /\.pfx$/]
-    expect(patterns[1]!.test('cert.pem')).toBe(true)
-    expect(patterns[1]!.test('src/cert.pem')).toBe(true)
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true })
   })
 
-  it('filters out .key files (regex pattern test)', () => {
-    const patterns = [/\.env($|\.)/, /\.pem$/, /\.key$/, /\.p12$/, /\.pfx$/]
-    expect(patterns[2]!.test('private.key')).toBe(true)
-    expect(patterns[2]!.test('src/private.key')).toBe(true)
+  it('filters out .env files by not including them in result', async () => {
+    const { execSync } = await import('node:child_process')
+    const mockedExecSync = vi.mocked(execSync)
+
+    // Create test files
+    writeFileSync(join(tmpDir, '.env'), 'SECRET=value')
+    writeFileSync(join(tmpDir, 'main.ts'), 'export const x = 1')
+
+    // Mock git ls-files to return both files
+    mockedExecSync.mockReturnValue('.env\nmain.ts')
+
+    const result = await collectFiles(tmpDir, ['**'], [], 200_000)
+
+    // Assert .env is NOT in result but main.ts IS
+    const paths = result.map(f => f.path)
+    expect(paths).not.toContain('.env')
+    expect(paths).toContain('main.ts')
   })
 
-  it('filters out .p12 files (regex pattern test)', () => {
-    const patterns = [/\.env($|\.)/, /\.pem$/, /\.key$/, /\.p12$/, /\.pfx$/]
-    expect(patterns[3]!.test('cert.p12')).toBe(true)
+  it('filters out .pem files by not including them in result', async () => {
+    const { execSync } = await import('node:child_process')
+    const mockedExecSync = vi.mocked(execSync)
+
+    writeFileSync(join(tmpDir, 'cert.pem'), '-----BEGIN CERTIFICATE-----')
+    writeFileSync(join(tmpDir, 'main.ts'), 'export const x = 1')
+
+    mockedExecSync.mockReturnValue('cert.pem\nmain.ts')
+
+    const result = await collectFiles(tmpDir, ['**'], [], 200_000)
+
+    const paths = result.map(f => f.path)
+    expect(paths).not.toContain('cert.pem')
+    expect(paths).toContain('main.ts')
   })
 
-  it('filters out .pfx files (regex pattern test)', () => {
-    const patterns = [/\.env($|\.)/, /\.pem$/, /\.key$/, /\.p12$/, /\.pfx$/]
-    expect(patterns[4]!.test('cert.pfx')).toBe(true)
+  it('filters out .key files by not including them in result', async () => {
+    const { execSync } = await import('node:child_process')
+    const mockedExecSync = vi.mocked(execSync)
+
+    writeFileSync(join(tmpDir, 'private.key'), '-----BEGIN PRIVATE KEY-----')
+    writeFileSync(join(tmpDir, 'main.ts'), 'export const x = 1')
+
+    mockedExecSync.mockReturnValue('private.key\nmain.ts')
+
+    const result = await collectFiles(tmpDir, ['**'], [], 200_000)
+
+    const paths = result.map(f => f.path)
+    expect(paths).not.toContain('private.key')
+    expect(paths).toContain('main.ts')
   })
 
-  it('secret pattern does not match files without secret extensions', () => {
-    const patterns = [/\.env($|\.)/, /\.pem$/, /\.key$/, /\.p12$/, /\.pfx$/]
-    expect(patterns[0]!.test('src/main.ts')).toBe(false)
-    expect(patterns[0]!.test('.envrc')).toBe(false) // only matches .env followed by nothing or dot
+  it('allows normal TypeScript files to be included', async () => {
+    const { execSync } = await import('node:child_process')
+    const mockedExecSync = vi.mocked(execSync)
+
+    writeFileSync(join(tmpDir, 'utils.ts'), 'export function add(a, b) { return a + b }')
+
+    mockedExecSync.mockReturnValue('utils.ts')
+
+    const result = await collectFiles(tmpDir, ['**'], [], 200_000)
+
+    const paths = result.map(f => f.path)
+    expect(paths).toContain('utils.ts')
+  })
+
+  it('real integration test: secret filter excludes multiple secret file types', async () => {
+    const { execSync } = await import('node:child_process')
+    const mockedExecSync = vi.mocked(execSync)
+
+    // Create multiple files including secrets
+    writeFileSync(join(tmpDir, '.env'), 'DB_PASSWORD=secret')
+    writeFileSync(join(tmpDir, '.env.local'), 'API_KEY=secret123')
+    writeFileSync(join(tmpDir, 'cert.pem'), 'cert content')
+    writeFileSync(join(tmpDir, 'secret.key'), 'key content')
+    writeFileSync(join(tmpDir, 'app.ts'), 'export const app = createApp()')
+    writeFileSync(join(tmpDir, 'lib.js'), 'export function helper() {}')
+
+    // Mock git ls-files to return all files
+    mockedExecSync.mockReturnValue('.env\n.env.local\ncert.pem\nsecret.key\napp.ts\nlib.js')
+
+    const result = await collectFiles(tmpDir, ['**'], [], 200_000)
+
+    const paths = result.map(f => f.path)
+    // Secrets should be filtered out
+    expect(paths).not.toContain('.env')
+    expect(paths).not.toContain('.env.local')
+    expect(paths).not.toContain('cert.pem')
+    expect(paths).not.toContain('secret.key')
+    // Normal files should be included
+    expect(paths).toContain('app.ts')
+    expect(paths).toContain('lib.js')
   })
 })
