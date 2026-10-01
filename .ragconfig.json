@@ -25,7 +25,7 @@
     "kFinal": 8,
     "expandDepth": 1,
     "rewrite": false,
-    "rerank": "false"
+    "rerank": "none"
   },
   "store": {
     "driver": "lancedb",

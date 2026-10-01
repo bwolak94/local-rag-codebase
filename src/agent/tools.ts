@@ -55,7 +55,8 @@ export async function semanticSearch(
   if (results.length === 0) return 'No results found.'
   return results.map(({ chunk, score }) => {
     const sym = chunk.symbol ? ` (${chunk.symbol})` : ''
-    return `[${chunk.path}:${chunk.startLine}-${chunk.endLine}${sym}] score=${score.toFixed(4)}\n${chunk.content}`
+    const safeSnippet = chunk.content.slice(0, 400).replace(/<\/chunk>/gi, '<\\/chunk>')
+    return `[${chunk.path}:${chunk.startLine}-${chunk.endLine}${sym}] score=${score.toFixed(4)}\n${safeSnippet}`
   }).join('\n\n---\n\n')
 }
 
@@ -121,13 +122,18 @@ export function listDir(
   const abs = resolve(ctx.root, input.path)
   if (!isSafePath(abs, ctx.root)) return 'Error: path outside repository root'
   try {
-    const entries = readdirSync(abs)
-    return entries.map(name => {
+    const allNames = readdirSync(abs)
+    const capped = allNames.slice(0, 200)
+    const lines = capped.map(name => {
       const full = resolve(abs, name)
       const stat = statSync(full)
       const rel = relative(ctx.root, full)
       return stat.isDirectory() ? `${rel}/` : `${rel} (${stat.size}B)`
-    }).join('\n')
+    })
+    if (allNames.length > 200) {
+      lines.push(`\n… and ${allNames.length - 200} more entries`)
+    }
+    return lines.join('\n')
   } catch {
     return `Error: cannot list ${input.path}`
   }

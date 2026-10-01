@@ -1,8 +1,7 @@
 import type { ScoredChunk, ChatTurn } from '../types/index.js'
 
-// rough token estimate: 4 chars per token
 export function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4)
+  return Math.ceil(text.length / 3.5)
 }
 
 export function allocateBudget(
@@ -23,7 +22,7 @@ export function trimContext(chunks: ScoredChunk[], maxTokens: number): ScoredChu
   const sorted = [...chunks].sort((a, b) => b.score - a.score)
   for (const c of sorted) {
     const t = estimateTokens(c.chunk.header + c.chunk.content)
-    if (used + t > maxTokens) break
+    if (result.length > 0 && used + t > maxTokens) break
     result.push(c)
     used += t
   }

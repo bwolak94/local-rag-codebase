@@ -1,6 +1,6 @@
 import { Ollama } from 'ollama'
 import { assembleMessages } from './prompt.js'
-import { allocateBudget, trimContext, trimHistory } from './budget.js'
+import { allocateBudget, trimContext, trimHistory, estimateTokens } from './budget.js'
 import type { Generator, ScoredChunk, ChatTurn } from '../types/index.js'
 import type { RagConfig } from '../config/schema.js'
 
@@ -50,7 +50,8 @@ export class OllamaGenerator implements Generator {
       this.config.budget.historyFraction,
     )
 
-    const trimmedContext = trimContext(context, contextTokens)
+    const questionTokens = estimateTokens(question)
+    const trimmedContext = trimContext(context, Math.max(0, contextTokens - questionTokens))
     const trimmedHistory = trimHistory(history, historyTokens)
     const messages = assembleMessages(question, trimmedContext, trimmedHistory)
 
@@ -75,7 +76,7 @@ export class OllamaGenerator implements Generator {
 
     // After stream ends, validate citations and emit warnings if any
     if (this.enableValidateCitations) {
-      const warnings = validateCitations(fullAnswer, context)
+      const warnings = validateCitations(fullAnswer, trimmedContext)
       if (warnings.length > 0) {
         yield '\n\nWARNING: Citation warnings:\n' + warnings.map(w => `  - ${w}`).join('\n')
       }

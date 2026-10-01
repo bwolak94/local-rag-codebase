@@ -36,7 +36,7 @@ function makeChunk(id: string, path = 'src/a.ts', score = 0.5): ScoredChunk {
   }
 }
 
-function makeConfig(rerank: 'false' | 'llm' | 'cross-encoder' = 'false'): RagConfig {
+function makeConfig(rerank: 'none' | 'llm' | 'cross-encoder' = 'none'): RagConfig {
   return {
     root: '.',
     include: ['src/**'],
@@ -187,9 +187,9 @@ describe('rerank', () => {
     mockGenerate.mockReset()
   })
 
-  it('returns chunks unchanged when config.retrieval.rerank is "false"', async () => {
+  it('returns chunks unchanged when config.retrieval.rerank is "none"', async () => {
     const chunks = [makeChunk('a'), makeChunk('b')]
-    const config = makeConfig('false')
+    const config = makeConfig('none')
 
     const result = await rerank('query', chunks, config)
 

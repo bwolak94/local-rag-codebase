@@ -13,7 +13,8 @@ export async function rerankWithLLM(
   if (chunks.length === 0) return chunks
   const client = new Ollama({ host })
 
-  const scored = await Promise.all(chunks.map(async ({ chunk, source }) => {
+  const scored: ScoredChunk[] = []
+  for (const { chunk, source } of chunks) {
     const prompt = `Rate how relevant this code snippet is to the question on a scale of 0.0 to 1.0.
 Return ONLY a number between 0.0 and 1.0 with no explanation.
 
@@ -32,11 +33,11 @@ Relevance score:`
         options: { num_ctx: config.llm.numCtx, temperature: 0 }, // num_ctx MUST be set
       })
       const score = parseFloat(res.response.trim())
-      return { chunk, score: isNaN(score) ? 0 : Math.min(1, Math.max(0, score)), source }
+      scored.push({ chunk, score: isNaN(score) ? 0 : Math.min(1, Math.max(0, score)), source })
     } catch {
-      return { chunk, score: 0, source }
+      scored.push({ chunk, score: 0, source })
     }
-  }))
+  }
 
   return scored.sort((a, b) => b.score - a.score)
 }
@@ -59,7 +60,7 @@ export async function rerank(
 ): Promise<ScoredChunk[]> {
   if (config.retrieval.rerank === 'llm') return rerankWithLLM(query, chunks, config, host)
   if (config.retrieval.rerank === 'cross-encoder') {
-    console.error('[rerank] cross-encoder is not yet implemented. Returning chunks unranked. Set rerank: "false" to suppress this message.')
+    console.error('[rerank] cross-encoder is not yet implemented. Returning chunks unranked. Set rerank: "none" to suppress this message.')
     return crossEncoderRerank(query, chunks)
   }
   return chunks

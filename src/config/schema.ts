@@ -10,6 +10,13 @@ export const RagConfigSchema = z.object({
     '**/*.lock',
     '**/go.sum',
     '**/Cargo.lock',
+    '**/.env',
+    '**/.env.*',
+    '**/*.pem',
+    '**/*.key',
+    '**/*.p12',
+    '**/*.pfx',
+    '**/secrets/**',
   ]).describe('Glob patterns to exclude'),
   maxFileBytes: z.number().default(200_000).describe('Skip files larger than this'),
   embedding: z.object({
@@ -29,7 +36,7 @@ export const RagConfigSchema = z.object({
     kFinal: z.number().default(8),
     expandDepth: z.number().default(1),
     rewrite: z.boolean().default(false),
-    rerank: z.enum(['false', 'llm', 'cross-encoder']).default('false'),
+    rerank: z.enum(['none', 'llm', 'cross-encoder']).default('none'),
   }).default({}),
   store: z.object({
     driver: z.enum(['lancedb', 'sqlite']).default('lancedb'),
