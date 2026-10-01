@@ -10,14 +10,20 @@ vi.mock('@lancedb/lancedb', async (importOriginal) => {
 
 // ---------------------------------------------------------------------------
 // Mock OllamaEmbedder — must be declared before any import of the module.
-// Query vectors are billingHigh (0.95) for "invoice", billingLow (0.85) for
-// "tax", and authLow (0.1) otherwise — ensuring deterministic L2 ranking.
+// Vectors use two orthogonal components so that cosine distance (used by
+// LanceDB) produces deterministic ranking: base=0.95 ≫ base=0.85 ≫ base=0.1.
 // ---------------------------------------------------------------------------
 vi.mock('../../src/embedding/ollama.js', () => {
   const DIM = 768
 
+  // i=0 carries `base`, i=1 carries `1-base` → different bases produce
+  // genuinely different angles, so cosine distance is non-trivially ordered.
   function makeVec(base: number): number[] {
-    return Array.from({ length: DIM }, (_, i) => (i === 0 ? base : base * 0.99))
+    return Array.from({ length: DIM }, (_, i) => {
+      if (i === 0) return base
+      if (i === 1) return 1 - base
+      return 0
+    })
   }
 
   return {
@@ -55,7 +61,11 @@ try {
 const DIM = 768
 
 function makeVec(base: number): number[] {
-  return Array.from({ length: DIM }, (_, i) => (i === 0 ? base : base * 0.99))
+  return Array.from({ length: DIM }, (_, i) => {
+    if (i === 0) return base
+    if (i === 1) return 1 - base
+    return 0
+  })
 }
 
 function makeChunk(
