@@ -36,6 +36,7 @@ function mockStore(chunks: ScoredChunk[]): Store {
   return {
     upsert: vi.fn(),
     deleteByPath: vi.fn(),
+    deleteByIds: vi.fn().mockResolvedValue(undefined),
     vectorSearch: vi.fn().mockResolvedValue([]),
     textSearch: vi.fn().mockResolvedValue([]),
     getMeta: vi.fn().mockResolvedValue(null),

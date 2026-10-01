@@ -162,6 +162,9 @@ Do not call more than ${MAX_STEPS} tools total.`
       break
     }
 
+    // Each LLM response round counts as one step
+    steps++
+
     const msg = response.message
     messages.push({ role: 'assistant', content: msg.content ?? '' })
 
@@ -185,9 +188,6 @@ Do not call more than ${MAX_STEPS} tools total.`
       toolsUsed.push(toolName)
       const result = await dispatchTool({ name: toolName, arguments: toolArgs }, ctx)
       messages.push({ role: 'tool', content: result, name: toolName })
-      steps++
-
-      if (steps >= MAX_STEPS) break
     }
   }
 

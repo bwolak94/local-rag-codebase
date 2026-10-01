@@ -1,6 +1,6 @@
 import { Command } from 'commander'
 import { loadConfig } from '../config/loader.js'
-import { OllamaEmbedder } from '../embedding/ollama.js'
+import { createEmbedder } from '../embedding/factory.js'
 import { createStore } from '../store/factory.js'
 import { SQLiteSymbolIndex } from '../symbols/index.js'
 import { HybridRetriever } from '../retrieval/hybrid.js'
@@ -14,7 +14,7 @@ export function register(program: Command) {
     .option('--config <path>', 'Path to .ragconfig.json')
     .action(async (opts) => {
       const config = loadConfig({}, opts.config)
-      const embedder = new OllamaEmbedder(config.embedding.model, config.embedding.batchSize)
+      const embedder = createEmbedder(config)
       const store = createStore(config)
       const symbolIndex = new SQLiteSymbolIndex(config.store.path, config.root)
       const { contextTokens } = allocateBudget(

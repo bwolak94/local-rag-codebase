@@ -2,7 +2,7 @@ import { Command } from 'commander'
 import chokidar from 'chokidar'
 import { resolve, relative } from 'node:path'
 import { loadConfig } from '../config/loader.js'
-import { OllamaEmbedder } from '../embedding/ollama.js'
+import { createEmbedder } from '../embedding/factory.js'
 import { createStore } from '../store/factory.js'
 import { IndexPipeline } from '../ingest/pipeline.js'
 
@@ -14,7 +14,7 @@ export function register(program: Command) {
     .action(async (opts) => {
       const config = loadConfig({}, opts.config)
       const store = createStore(config)
-      const embedder = new OllamaEmbedder(config.embedding.model, config.embedding.batchSize)
+      const embedder = createEmbedder(config)
       const pipeline = new IndexPipeline(config, store, embedder)
 
       // initial full incremental index

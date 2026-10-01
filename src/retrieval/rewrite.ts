@@ -1,16 +1,22 @@
 import { Ollama } from 'ollama'
 import type { ChatTurn } from '../types/index.js'
 
+const clientCache = new Map<string, Ollama>()
+function getClient(host: string): Ollama {
+  if (!clientCache.has(host)) clientCache.set(host, new Ollama({ host }))
+  return clientCache.get(host)!
+}
+
 // expandQuery: generates a hypothetical code snippet for the query (HyDE-lite)
 // Returns the hypothetical snippet to use as a second retrieval query
 export async function expandQuery(
   query: string,
   model: string,
   numCtx: number,
-  temperature = 0.3,
+  hydeTemperature = 0.0,
   host = 'http://localhost:11434',
 ): Promise<string> {
-  const client = new Ollama({ host })
+  const client = getClient(host)
 
   const prompt = `Write a short hypothetical code snippet (5-15 lines) that would be the answer to the following question about a TypeScript codebase. Write ONLY the code, no explanation.
 
@@ -23,7 +29,7 @@ Hypothetical code snippet:`
       model,
       prompt,
       stream: false,
-      options: { num_ctx: numCtx, temperature }, // num_ctx MUST be set
+      options: { num_ctx: numCtx, temperature: hydeTemperature }, // num_ctx MUST be set
     })
     return res.response.trim() || query
   } catch {
@@ -44,7 +50,7 @@ export async function condensQuestion(
 ): Promise<string> {
   if (history.length === 0) return followUp
 
-  const client = new Ollama({ host })
+  const client = getClient(host)
   const historyText = history
     .map(t => `${t.role === 'user' ? 'User' : 'Assistant'}: ${t.content}`)
     .join('\n')

@@ -36,6 +36,10 @@ describe('SQLiteSymbolIndex', () => {
     idx = new SQLiteSymbolIndex('.sym', tmpDir)
   })
 
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true })
+  })
+
   it('upsert() inserts defs and refs without error', async () => {
     await expect(idx.upsert([makeDef()], [makeRef()])).resolves.toBeUndefined()
   })

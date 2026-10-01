@@ -152,7 +152,8 @@ describe('createMCPServer', () => {
     expect(kSchema).toBeDefined()
     expect(kSchema['minimum']).toBe(1)
     expect(kSchema['maximum']).toBe(20)
-    expect(kSchema['multipleOf']).toBe(1)
+    // zod-to-json-schema represents .int() as type:"integer", not multipleOf:1
+    expect(kSchema['type']).toBe('integer')
   })
 
   it('tools/call for semantic_search returns text content', async () => {

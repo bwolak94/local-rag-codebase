@@ -25,7 +25,8 @@
     "ollama": "^0.5.0",
     "tree-sitter-wasms": "^0.1.0",
     "web-tree-sitter": "^0.22.6",
-    "zod": "^3.23.0"
+    "zod": "^3.23.0",
+    "zod-to-json-schema": "^3.25.2"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.0",

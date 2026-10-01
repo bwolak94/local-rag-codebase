@@ -147,6 +147,30 @@ export class SQLiteStore implements Store {
     run()
   }
 
+  async deleteByIds(ids: string[]): Promise<void> {
+    if (ids.length === 0) return
+    const getRowids = this.db
+      .prepare<string[], { rowid: number; id: string }>(
+        `SELECT rowid, id FROM chunks WHERE id IN (${ids.map(() => '?').join(',')})`
+      )
+      .all(...ids)
+
+    const deleteFtsRow = this.db.prepare('DELETE FROM chunks_fts WHERE rowid = ?')
+    const deleteVec = this.db.prepare('DELETE FROM chunks_vec WHERE chunk_id = ?')
+    const placeholders = ids.map(() => '?').join(',')
+    const deleteChunk = this.db.prepare(`DELETE FROM chunks WHERE id IN (${placeholders})`)
+
+    const run = this.db.transaction(() => {
+      for (const row of getRowids) {
+        deleteFtsRow.run(row.rowid)
+        deleteVec.run(row.id)
+      }
+      deleteChunk.run(...ids)
+    })
+
+    run()
+  }
+
   async vectorSearch(
     vector: number[],
     k: number,

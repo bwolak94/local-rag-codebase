@@ -18,6 +18,8 @@ export interface EvalDetail {
   q: string
   expected: string[]
   retrieved: string[]
+  // found indicates whether the expected file appeared anywhere in the full result set,
+  // not the same as Recall@k which checks only the top-k results
   found: boolean
   reciprocalRank: number
 }
@@ -104,10 +106,11 @@ async function main() {
   for (const item of dataset) {
     const results = await retriever.retrieve(item.q, { k: maxK })
     const retrievedPaths = results.map(r => r.chunk.path)
+    const slicedPaths = retrievedPaths.slice(0, maxK)
 
     let reciprocalRank = 0
-    for (let i = 0; i < retrievedPaths.length; i++) {
-      const p = retrievedPaths[i]
+    for (let i = 0; i < slicedPaths.length; i++) {
+      const p = slicedPaths[i]
       if (p !== undefined && item.expected.some(e => p.startsWith(e) || p === e)) {
         reciprocalRank = 1 / (i + 1)
         break
@@ -115,11 +118,11 @@ async function main() {
     }
     mrrSum += reciprocalRank
 
-    const found = item.expected.some(e => retrievedPaths.some(p => p.startsWith(e) || p === e))
+    const found = item.expected.some(e => slicedPaths.some(p => p.startsWith(e) || p === e))
     details.push({
       q: item.q,
       expected: item.expected,
-      retrieved: retrievedPaths,   // full list, not .slice(0, maxK)
+      retrieved: slicedPaths,
       found,
       reciprocalRank,
     })
@@ -135,7 +138,7 @@ async function main() {
       `Recall@${k}:  ${recall.toFixed(2)} (${pct}% — ${Math.round(recall * dataset.length)}/${dataset.length} questions)`,
     )
   }
-  console.log(`MRR:       ${mrr.toFixed(2)}`)
+  console.log(`MRR@${maxK}:       ${mrr.toFixed(2)}`)
 
   // Per-tag breakdown
   const { tagBreakdown, tagCounts } = computeTagBreakdown(details, dataset, kValues)

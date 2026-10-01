@@ -1,7 +1,8 @@
 import Parser from 'web-tree-sitter'
 import { getParser } from '../chunking/treesitter.js'
 import { chunkId as makeChunkId } from '../ingest/hasher.js'
-import type { SymbolDef, SymbolRef, ChunkKind, SourceFile, Chunk } from '../types/index.js'
+import { kindFromNodeType } from '../chunking/kinds.js'
+import type { SymbolDef, SymbolRef, SourceFile, Chunk } from '../types/index.js'
 
 export interface ExtractionResult {
   defs: SymbolDef[]
@@ -31,16 +32,6 @@ const REF_PARENT_TYPES = new Set([
   'call_expression',
   'type_reference',
 ])
-
-function kindFromNodeType(type: string): ChunkKind {
-  if (type.includes('function_definition')) return 'function'
-  if (type.includes('function')) return 'function'
-  if (type.includes('method')) return 'method'
-  if (type.includes('class')) return 'class'
-  if (type.includes('interface')) return 'interface'
-  if (type.includes('type_alias')) return 'type'
-  return 'module'
-}
 
 /**
  * Find the chunk that contains the given line range by overlap.

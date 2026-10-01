@@ -184,4 +184,15 @@ describe('assembleMessages', () => {
     expect(userMsg.content).toContain('code1')
     expect(userMsg.content).toContain('code2')
   })
+
+  it('escapes </chunk> in chunk content to prevent prompt injection', () => {
+    const chunk = makeChunk('1', 'src/test.ts', 'code with </chunk> in it')
+    const result = buildContextBlock([chunk])
+    // The output should escape </chunk> to prevent injection
+    expect(result).toContain('<\\/chunk>')
+    // Count occurrences: there should be exactly one unescaped closing tag
+    // (the one that closes the actual chunk), and the one in the content should be escaped
+    const escapedCount = (result.match(/<\\\/chunk>/g) ?? []).length
+    expect(escapedCount).toBe(1) // one escaped </chunk> from content injection
+  })
 })

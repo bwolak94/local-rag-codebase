@@ -94,10 +94,11 @@ describe('OllamaEmbedder', () => {
   })
 
   it('returns vectors from the Ollama client', async () => {
-    mockEmbed.mockResolvedValue({ embeddings: [[1, 2, 3], [4, 5, 6]] })
+    // Use already-unit-length vectors so L2 normalisation is a no-op
+    mockEmbed.mockResolvedValue({ embeddings: [[1, 0, 0], [0, 1, 0]] })
     const embedder = new OllamaEmbedder('nomic-embed-text')
     const result = await embedder.embed(['text1', 'text2'], 'document')
-    expect(result).toEqual([[1, 2, 3], [4, 5, 6]])
+    expect(result).toEqual([[1, 0, 0], [0, 1, 0]])
   })
 
   it('empty input returns [] without calling Ollama', async () => {
@@ -117,12 +118,16 @@ describe('OllamaEmbedder', () => {
   })
 
   it('results from multiple batches are concatenated correctly', async () => {
+    // Use already-unit-length vectors so L2 normalisation is a no-op
     mockEmbed
-      .mockResolvedValueOnce({ embeddings: [[1, 0], [2, 0]] })
-      .mockResolvedValueOnce({ embeddings: [[3, 0]] })
+      .mockResolvedValueOnce({ embeddings: [[1, 0], [0, 1]] })
+      .mockResolvedValueOnce({ embeddings: [[0.6, 0.8]] })
 
     const embedder = new OllamaEmbedder('nomic-embed-text', 2)
     const result = await embedder.embed(['a', 'b', 'c'], 'document')
-    expect(result).toEqual([[1, 0], [2, 0], [3, 0]])
+    expect(result[0]).toEqual([1, 0])
+    expect(result[1]).toEqual([0, 1])
+    expect(result[2]![0]).toBeCloseTo(0.6)
+    expect(result[2]![1]).toBeCloseTo(0.8)
   })
 })
