@@ -335,6 +335,14 @@ describe.skipIf(!sqliteAvailable)('IndexPipeline', () => {
       hash: 'hashv2',
     }
 
+    const chunkV1: Chunk = { id: 'changing-c1', path: 'src/changing.ts', lang: 'typescript', kind: 'chunk', startLine: 1, endLine: 1, header: 'h', content: 'v=1', hash: 'chunk-hash-v1' }
+    const chunkV2: Chunk = { id: 'changing-c1', path: 'src/changing.ts', lang: 'typescript', kind: 'chunk', startLine: 1, endLine: 1, header: 'h', content: 'v=2', hash: 'chunk-hash-v2' }
+
+    // Each pipeline.run() creates a new SlidingWindowChunker — configure each run's instance
+    mockSlidingWindowImpl
+      .mockImplementationOnce(() => ({ supports: () => true, chunk: vi.fn().mockResolvedValue([chunkV1]) }))
+      .mockImplementationOnce(() => ({ supports: () => true, chunk: vi.fn().mockResolvedValue([chunkV2]) }))
+
     const store = mockStore()
     const embedder = mockEmbedder()
     const config = testConfig(tmpDir)
@@ -363,6 +371,13 @@ describe.skipIf(!sqliteAvailable)('IndexPipeline', () => {
       content: 'export const a = 1',
       hash: 'hash-shrinking-v1',
     }
+
+    const chunkV1: Chunk = { id: 'shrinking-c1', path: 'src/shrinking.ts', lang: 'typescript', kind: 'chunk', startLine: 1, endLine: 1, header: 'h', content: 'a=1', hash: 'ch-hash' }
+
+    // First run returns a chunk; second run returns [] simulating chunk removal
+    mockSlidingWindowImpl
+      .mockImplementationOnce(() => ({ supports: () => true, chunk: vi.fn().mockResolvedValue([chunkV1]) }))
+      .mockImplementationOnce(() => ({ supports: () => true, chunk: vi.fn().mockResolvedValue([]) }))
 
     mockedCollect.mockResolvedValue([fakeFile])
     const store = mockStore()

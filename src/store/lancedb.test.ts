@@ -215,17 +215,15 @@ describe.skipIf(!lancedbAvailable)('LanceDBStore', () => {
     })
     await store.upsert([chunkInQuotedDir, chunkOther])
 
-    let results: Awaited<ReturnType<typeof store.vectorSearch>>
-    await expect(async () => {
-      results = await store.vectorSearch(
-        [0.1, 0.2, 0.3, 0.4],
-        10,
-        { pathPrefix: "src/file's directory/" },
-      )
-    }).not.toThrow()
+    // If vectorSearch throws, the test fails on the await — that is the desired behaviour
+    const results = await store.vectorSearch(
+      [0.1, 0.2, 0.3, 0.4],
+      10,
+      { pathPrefix: "src/file's directory/" },
+    )
 
     // Every returned result must come from the quoted-directory prefix
-    for (const r of results!) {
+    for (const r of results) {
       expect(r.chunk.path.startsWith("src/file's directory/")).toBe(true)
     }
   })
@@ -241,17 +239,15 @@ describe.skipIf(!lancedbAvailable)('LanceDBStore', () => {
     })
     await store.upsert([chunkInQuotedDir, chunkOther])
 
-    let results: Awaited<ReturnType<typeof store.textSearch>>
-    await expect(async () => {
-      results = await store.textSearch(
-        'uniqueterm',
-        10,
-        { pathPrefix: "src/file's directory/" },
-      )
-    }).not.toThrow()
+    // If textSearch throws, the test fails on the await — that is the desired behaviour
+    const results = await store.textSearch(
+      'uniqueterm',
+      10,
+      { pathPrefix: "src/file's directory/" },
+    )
 
     // Every returned result (if any) must come from the quoted-directory prefix
-    for (const r of results!) {
+    for (const r of results) {
       expect(r.chunk.path.startsWith("src/file's directory/")).toBe(true)
     }
   })

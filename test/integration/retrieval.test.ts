@@ -206,7 +206,7 @@ describe.skipIf(!lancedbAvailable)('retrieval integration', () => {
 
   it('HybridRetriever.retrieve with pathPrefix restricts to billing files', async () => {
     const embedder = new OllamaEmbedder('nomic-embed-text')
-    const retriever = new HybridRetriever(store, embedder, 10, 10, symbolIndex)
+    const retriever = new HybridRetriever(store, embedder, { kVector: 10, kFts: 10, symbolIndex })
 
     const results = await retriever.retrieve('invoice service', {
       k: 5,
@@ -224,11 +224,7 @@ describe.skipIf(!lancedbAvailable)('retrieval integration', () => {
     const retriever = new HybridRetriever(
       store,
       embedder,
-      10,
-      10,
-      symbolIndex,
-      /* expandMaxTokens */ 8192,
-      /* expandDepth */ 1,
+      { kVector: 10, kFts: 10, symbolIndex, expandMaxTokens: 8192, expandDepth: 1 },
     )
 
     const results = await retriever.retrieve('invoice issue', {

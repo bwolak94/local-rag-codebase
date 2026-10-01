@@ -91,7 +91,7 @@ async function main() {
   const config = loadConfig()
   const embedder = new OllamaEmbedder(config.embedding.model, config.embedding.batchSize)
   const store = new LanceDBStore(config.store.path, config.root, config.embedding.model)
-  const retriever = new HybridRetriever(store, embedder, config.retrieval.kVector, config.retrieval.kFts, undefined, undefined, config.retrieval.expandDepth, config)
+  const retriever = new HybridRetriever(store, embedder, { kVector: config.retrieval.kVector, kFts: config.retrieval.kFts, expandDepth: config.retrieval.expandDepth }, config)
 
   const dataset: Question[] = readFileSync(resolve(__dirname, 'dataset.jsonl'), 'utf8')
     .trim()

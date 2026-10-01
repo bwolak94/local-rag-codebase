@@ -36,7 +36,7 @@ export class HybridRetriever implements Retriever {
 
     // HyDE-lite: when rewrite is enabled, generate a hypothetical code snippet
     // and run an additional vector search with it, then fuse all three lists
-    if (this.config?.retrieval.rewrite === true) {
+    if (this.config?.retrieval?.rewrite === true) {
       try {
         const hydeSnippet = await expandQuery(
           effectiveQuery,
@@ -55,7 +55,7 @@ export class HybridRetriever implements Retriever {
       }
     }
 
-    const rrfK = this.config?.retrieval.rrfK ?? 60
+    const rrfK = this.config?.retrieval?.rrfK ?? 60
     const fused = rrf(rrfLists, rrfK)
     let top = fused.slice(0, opts.k)
 
@@ -65,7 +65,7 @@ export class HybridRetriever implements Retriever {
       top = await expandChunks(top, this.opts.symbolIndex, this.store, maxTokens, expandDepth)
     }
 
-    if (this.config && this.config.retrieval.rerank !== 'none') {
+    if (this.config && this.config.retrieval?.rerank !== 'none') {
       top = await rerank(effectiveQuery, top, this.config)
     }
 
