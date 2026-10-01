@@ -40,7 +40,7 @@ function makeConfig(overrides: Partial<RagConfig['llm']> = {}): RagConfig {
       kFinal: 8,
       expandDepth: 1,
       rewrite: false,
-      rerank: 'false',
+      rerank: 'none',
     },
     store: { driver: 'lancedb', path: '.rag' },
     budget: { contextFraction: 0.6, historyFraction: 0.2 },

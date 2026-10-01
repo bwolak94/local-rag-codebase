@@ -27,6 +27,7 @@ vi.mock('../symbols/expand.js', () => ({
 
 vi.mock('./rewrite.js', () => ({
   expandQuery: vi.fn().mockResolvedValue('snippet'),
+  condensQuestion: vi.fn().mockResolvedValue('rewritten question'),
 }))
 
 vi.mock('./rerank.js', () => ({
@@ -274,7 +275,7 @@ describe('HybridRetriever', () => {
         kFinal: 8,
         expandDepth: 1,
         rewrite: false,
-        rerank: 'false',
+        rerank: 'none',
         ...retrieval,
       },
       store: { driver: 'lancedb', path: '.rag' },
@@ -290,7 +291,7 @@ describe('HybridRetriever', () => {
     vi.mocked(store.vectorSearch).mockResolvedValue([vectorResult])
     vi.mocked(store.textSearch).mockResolvedValue([])
 
-    const config = makeFullConfig({ rewrite: true, rerank: 'false' })
+    const config = makeFullConfig({ rewrite: true, rerank: 'none' })
     const retriever = new HybridRetriever(store, embedder, 20, 20, undefined, undefined, 1, config)
     await retriever.retrieve('test query', { k: 8 })
 
@@ -306,7 +307,7 @@ describe('HybridRetriever', () => {
     vi.mocked(store.vectorSearch).mockResolvedValue([makeChunk('v1', 0.9)])
     vi.mocked(store.textSearch).mockResolvedValue([makeChunk('t1', 0.8)])
 
-    const config = makeFullConfig({ rewrite: true, rerank: 'false' })
+    const config = makeFullConfig({ rewrite: true, rerank: 'none' })
     const retriever = new HybridRetriever(store, embedder, 20, 20, undefined, undefined, 1, config)
 
     // Should NOT throw

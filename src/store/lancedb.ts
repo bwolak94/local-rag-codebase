@@ -15,6 +15,7 @@ const CHUNKS_TABLE = 'chunks'
 export class LanceDBStore implements Store {
   private dbPath: string
   private db: lancedb.Connection | null = null
+  private metaChecked = false
 
   constructor(storePath: string, root: string, private embedModel: string) {
     this.dbPath = resolve(root, storePath)
@@ -38,6 +39,19 @@ export class LanceDBStore implements Store {
       return { embedModel: String(rows[0]['embedModel']), dim: Number(rows[0]['dim']) }
     } catch {
       return null
+    }
+  }
+
+  async checkMeta(currentModel: string, currentDim: number): Promise<void> {
+    if (this.metaChecked) return
+    const meta = await this.getMeta()
+    this.metaChecked = true
+    if (!meta) return
+    if (meta.embedModel !== currentModel) {
+      throw new ModelMismatchError(meta.embedModel, currentModel)
+    }
+    if (currentDim > 0 && meta.dim !== currentDim) {
+      throw new ModelMismatchError(`${meta.embedModel}(dim=${meta.dim})`, `${currentModel}(dim=${currentDim})`)
     }
   }
 
@@ -80,14 +94,11 @@ export class LanceDBStore implements Store {
         .execute(rows)
     }
 
-    // persist meta from first chunk's vector length
+    // persist meta from first chunk's vector length — always update so --full reindex is reflected
     const firstChunk = chunks[0]
     if (firstChunk !== undefined) {
       const dim = firstChunk.vector.length
-      const meta = await this.getMeta()
-      if (!meta) {
-        await this.setMeta(this.embedModel, dim)
-      }
+      await this.setMeta(this.embedModel, dim)
     }
   }
 
@@ -104,6 +115,7 @@ export class LanceDBStore implements Store {
   }
 
   async vectorSearch(vector: number[], k: number, filter?: SearchFilter): Promise<ScoredChunk[]> {
+    await this.checkMeta(this.embedModel, vector.length)
     try {
       const db = await this.connect()
       const names = await db.tableNames()
@@ -125,7 +137,7 @@ export class LanceDBStore implements Store {
       const rows = await q.toArray()
       return rows.map(r => ({
         chunk: rowToChunk(r),
-        score: Number(r['_distance'] ?? 0),
+        score: 1 / (1 + Number(r['_distance'] ?? 0)),
         source: 'vector' as const,
       }))
     } catch {
@@ -134,6 +146,7 @@ export class LanceDBStore implements Store {
   }
 
   async textSearch(query: string, k: number, filter?: SearchFilter): Promise<ScoredChunk[]> {
+    await this.checkMeta(this.embedModel, 0)
     try {
       const db = await this.connect()
       const names = await db.tableNames()

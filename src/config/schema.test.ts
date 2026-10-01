@@ -13,6 +13,13 @@ describe('RagConfigSchema', () => {
       '**/*.lock',
       '**/go.sum',
       '**/Cargo.lock',
+      '**/.env',
+      '**/.env.*',
+      '**/*.pem',
+      '**/*.key',
+      '**/*.p12',
+      '**/*.pfx',
+      '**/secrets/**',
     ])
     expect(result.maxFileBytes).toBe(200_000)
     expect(result.embedding.model).toBe('nomic-embed-text')
@@ -27,7 +34,7 @@ describe('RagConfigSchema', () => {
     expect(result.retrieval.kFinal).toBe(8)
     expect(result.retrieval.expandDepth).toBe(1)
     expect(result.retrieval.rewrite).toBe(false)
-    expect(result.retrieval.rerank).toBe('false')
+    expect(result.retrieval.rerank).toBe('none')
     expect(result.store.driver).toBe('lancedb')
     expect(result.store.path).toBe('.rag')
     expect(result.budget.contextFraction).toBe(0.60)
@@ -80,8 +87,8 @@ describe('RagConfigSchema', () => {
   })
 
   it('accepts valid rerank enum values', () => {
-    const off = RagConfigSchema.parse({ retrieval: { rerank: 'false' } })
-    expect(off.retrieval.rerank).toBe('false')
+    const off = RagConfigSchema.parse({ retrieval: { rerank: 'none' } })
+    expect(off.retrieval.rerank).toBe('none')
 
     const llm = RagConfigSchema.parse({ retrieval: { rerank: 'llm' } })
     expect(llm.retrieval.rerank).toBe('llm')
