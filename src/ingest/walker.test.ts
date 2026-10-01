@@ -188,4 +188,58 @@ describe('collectFiles', () => {
     expect(paths).toContain('app.ts')
     expect(paths).toContain('lib.js')
   })
+
+  it('filters out files larger than maxFileBytes', async () => {
+    const { execSync } = await import('node:child_process')
+    const mockedExecSync = vi.mocked(execSync)
+
+    const bigContent = 'x'.repeat(500)
+    const smallContent = 'export const x = 1'
+
+    writeFileSync(join(tmpDir, 'big.ts'), bigContent)
+    writeFileSync(join(tmpDir, 'small.ts'), smallContent)
+
+    mockedExecSync.mockReturnValue('big.ts\nsmall.ts')
+
+    // maxFileBytes = 100, big.ts is 500 bytes → should be excluded
+    const result = await collectFiles(tmpDir, ['**'], [], 100)
+
+    const paths = result.map(f => f.path)
+    expect(paths).not.toContain('big.ts')
+    expect(paths).toContain('small.ts')
+  })
+
+  it('restricts to .ts files when include is ["**/*.ts"]', async () => {
+    const { execSync } = await import('node:child_process')
+    const mockedExecSync = vi.mocked(execSync)
+
+    writeFileSync(join(tmpDir, 'module.ts'), 'export const a = 1')
+    writeFileSync(join(tmpDir, 'script.js'), 'const b = 2')
+
+    mockedExecSync.mockReturnValue('module.ts\nscript.js')
+
+    const result = await collectFiles(tmpDir, ['**/*.ts'], [], 200_000)
+
+    const paths = result.map(f => f.path)
+    expect(paths).toContain('module.ts')
+    expect(paths).not.toContain('script.js')
+  })
+
+  it('excludes files inside generated/ directory via exclude glob', async () => {
+    const { execSync } = await import('node:child_process')
+    const { mkdirSync } = await import('node:fs')
+    const mockedExecSync = vi.mocked(execSync)
+
+    mkdirSync(join(tmpDir, 'generated'), { recursive: true })
+    writeFileSync(join(tmpDir, 'generated', 'auto.ts'), 'export const auto = true')
+    writeFileSync(join(tmpDir, 'handwritten.ts'), 'export const hand = true')
+
+    mockedExecSync.mockReturnValue('generated/auto.ts\nhandwritten.ts')
+
+    const result = await collectFiles(tmpDir, ['**'], ['**/generated/**'], 200_000)
+
+    const paths = result.map(f => f.path)
+    expect(paths).not.toContain('generated/auto.ts')
+    expect(paths).toContain('handwritten.ts')
+  })
 })

@@ -19,39 +19,10 @@ const LANG_TO_WASM: Record<string, string> = {
   php: 'tree-sitter-php.wasm',
 }
 
-// Inline S-expression queries per language
-const TS_QUERY = `
-(function_declaration name: (identifier) @name) @symbol
-(method_definition name: (property_identifier) @name) @symbol
-(class_declaration name: (type_identifier) @name) @symbol
-(interface_declaration name: (type_identifier) @name) @symbol
-(type_alias_declaration name: (type_identifier) @name) @symbol
-(export_statement declaration: [
-  (function_declaration name: (identifier) @name)
-  (class_declaration name: (type_identifier) @name)
-  (interface_declaration name: (type_identifier) @name)
-  (type_alias_declaration name: (type_identifier) @name)
-] @symbol)
-`
-
-const JS_QUERY = `
-(function_declaration name: (identifier) @name) @symbol
-(method_definition name: (property_identifier) @name) @symbol
-(class_declaration name: (type_identifier) @name) @symbol
-(lexical_declaration
-  (variable_declarator
-    name: (identifier) @name
-    value: (arrow_function) @symbol))
-(variable_declaration
-  (variable_declarator
-    name: (identifier) @name
-    value: (arrow_function) @symbol))
-`
-
 const QUERIES: Record<string, string> = {
-  typescript: TS_QUERY,
-  tsx: TS_QUERY,
-  javascript: JS_QUERY,
+  typescript: readFileSync(resolve(__dirname, 'queries/typescript.scm'), 'utf8'),
+  tsx: readFileSync(resolve(__dirname, 'queries/typescript.scm'), 'utf8'),
+  javascript: readFileSync(resolve(__dirname, 'queries/javascript.scm'), 'utf8'),
   python: readFileSync(resolve(__dirname, 'queries/python.scm'), 'utf8'),
   php: readFileSync(resolve(__dirname, 'queries/php.scm'), 'utf8'),
 }
@@ -98,8 +69,31 @@ function extractImports(rootNode: Parser.SyntaxNode): string[] {
   const imports: string[] = []
   for (const child of rootNode.children) {
     if (child.type === 'import_declaration') {
-      const source = child.childForFieldName('source')?.text?.replace(/['"]/g, '')
-      if (source) imports.push(source)
+      const clause = child.childForFieldName('import_clause') ?? child.children.find(c => c.type === 'import_clause')
+      if (clause) {
+        // Default import: `import Foo from '...'`
+        const defaultIdent = clause.children.find(c => c.type === 'identifier')
+        if (defaultIdent) imports.push(defaultIdent.text)
+
+        // Named imports: `import { A, B } from '...'`
+        const namedImports = clause.children.find(c => c.type === 'named_imports')
+        if (namedImports) {
+          for (const specifier of namedImports.children) {
+            if (specifier.type === 'import_specifier') {
+              // The `name` field is the local binding identifier
+              const ident = specifier.childForFieldName('name') ?? specifier.children.find(c => c.type === 'identifier')
+              if (ident) imports.push(ident.text)
+            }
+          }
+        }
+      } else {
+        // Side-effect import: `import 'side-effect'` — fall back to module basename
+        const source = child.childForFieldName('source')?.text?.replace(/['"]/g, '')
+        if (source) {
+          const base = source.split('/').pop()?.replace(/\.[^.]+$/, '')
+          if (base) imports.push(base)
+        }
+      }
     }
     // Python: import_statement, import_from_statement
     if (child.type === 'import_statement' || child.type === 'import_from_statement') {
@@ -230,22 +224,59 @@ export class TreeSitterChunker implements Chunker {
       // split oversized symbols
       if (content.length > 2500) {
         const partLines = lines.slice(node.startPosition.row, node.endPosition.row + 1)
-        const half = Math.floor(partLines.length / 2)
-        const part1 = partLines.slice(0, half).join('\n')
-        const part2 = partLines.slice(half).join('\n')
+        const totalLines = partLines.length
+        const midpointRow = node.startPosition.row + Math.floor(totalLines / 2)
 
+        // Find the last child node ending at or before the midpoint — logical split boundary
+        let splitRow = Math.floor(totalLines / 2) // fallback: hard midpoint (0-based within partLines)
+        for (const childNode of node.children) {
+          if (childNode.endPosition.row <= midpointRow) {
+            splitRow = childNode.endPosition.row - node.startPosition.row + 1
+          }
+        }
+        // Guard: split must leave something in each part
+        if (splitRow <= 0 || splitRow >= totalLines) {
+          splitRow = Math.floor(totalLines / 2)
+        }
+
+        // Signature: first line(s) of the node up to and including the opening brace or colon
+        // Scan up to first 5 lines for the opening brace/colon
+        let sigLineCount = 1
+        for (let si = 0; si < Math.min(5, totalLines); si++) {
+          if (/[{:]/.test(partLines[si] ?? '')) {
+            sigLineCount = si + 1
+            break
+          }
+        }
+        const signaturePrefix = partLines.slice(0, sigLineCount).join('\n')
+
+        const part1 = partLines.slice(0, splitRow).join('\n')
+        const part2Lines = partLines.slice(splitRow)
+        const part2 = signaturePrefix + '\n' + part2Lines.join('\n')
+
+        const symbolCont = symbol ? `${symbol} (cont.)` : undefined
         const h1 = header + ' part:1'
-        const h2 = header + ' part:2'
+        const h2Parts = [
+          `file:${file.path}`,
+          symbolCont ? `symbol:${symbolCont}` : null,
+          `kind:${kind}`,
+          `lang:${file.lang}`,
+          `lines:${startLine + splitRow}-${endLine}`,
+          importsForFile.length > 0 ? `imports:${importsForFile.join(',')}` : null,
+          'part:2',
+        ].filter(Boolean) as string[]
+        const h2 = h2Parts.join(' ')
+
         normalChunks.push({
           id: chunkId(file.path, symbol ? `${symbol}:1` : undefined, startLine),
           path: file.path, lang: file.lang, kind, symbol,
-          startLine, endLine: startLine + half - 1,
+          startLine, endLine: startLine + splitRow - 1,
           header: h1, content: part1, hash: chunkHash(h1, part1),
         })
         normalChunks.push({
-          id: chunkId(file.path, symbol ? `${symbol}:2` : undefined, startLine + half),
-          path: file.path, lang: file.lang, kind, symbol,
-          startLine: startLine + half, endLine,
+          id: chunkId(file.path, symbol ? `${symbol}:2` : undefined, startLine + splitRow),
+          path: file.path, lang: file.lang, kind, symbol: symbolCont,
+          startLine: startLine + splitRow, endLine,
           header: h2, content: part2, hash: chunkHash(h2, part2),
         })
         continue

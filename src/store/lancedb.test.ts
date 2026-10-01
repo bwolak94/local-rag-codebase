@@ -1,5 +1,20 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+
+// Prevent native-binding crash when @lancedb/lancedb binary is missing.
+// importOriginal re-uses the real module when available; falls back to a stub.
+vi.mock('@lancedb/lancedb', async (importOriginal) => {
+  try { return await importOriginal() } catch { return {} }
+})
+
 import { LanceDBStore, ModelMismatchError } from './lancedb.js'
+
+let lancedbAvailable = false
+try {
+  await import('@lancedb/lancedb')
+  // Verify the binary actually loaded (the mock returns {} when it fails)
+  const mod = await import('@lancedb/lancedb') as Record<string, unknown>
+  lancedbAvailable = typeof mod.connect === 'function'
+} catch { /* native binding not available — all tests will be skipped */ }
 import { tmpdir } from 'node:os'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
@@ -24,7 +39,7 @@ function makeEmbeddedChunk(
   }
 }
 
-describe('LanceDBStore', () => {
+describe.skipIf(!lancedbAvailable)('LanceDBStore', () => {
   let tmpDir: string
   let store: LanceDBStore
 
@@ -191,6 +206,52 @@ describe('LanceDBStore', () => {
     expect(results).toHaveLength(0)
   })
 
+  it("vectorSearch with single-quote in pathPrefix does not throw", async () => {
+    const chunkInQuotedDir = makeEmbeddedChunk('chunk-sq-vec', {
+      path: "src/file's directory/a.ts",
+    })
+    const chunkOther = makeEmbeddedChunk('chunk-sq-vec-other', {
+      path: 'src/other/b.ts',
+    })
+    await store.upsert([chunkInQuotedDir, chunkOther])
+
+    // If vectorSearch throws, the test fails on the await — that is the desired behaviour
+    const results = await store.vectorSearch(
+      [0.1, 0.2, 0.3, 0.4],
+      10,
+      { pathPrefix: "src/file's directory/" },
+    )
+
+    // Every returned result must come from the quoted-directory prefix
+    for (const r of results) {
+      expect(r.chunk.path.startsWith("src/file's directory/")).toBe(true)
+    }
+  })
+
+  it("textSearch with single-quote in pathPrefix does not throw", async () => {
+    const chunkInQuotedDir = makeEmbeddedChunk('chunk-sq-fts', {
+      path: "src/file's directory/a.ts",
+      content: 'uniqueterm',
+    })
+    const chunkOther = makeEmbeddedChunk('chunk-sq-fts-other', {
+      path: 'src/other/b.ts',
+      content: 'uniqueterm',
+    })
+    await store.upsert([chunkInQuotedDir, chunkOther])
+
+    // If textSearch throws, the test fails on the await — that is the desired behaviour
+    const results = await store.textSearch(
+      'uniqueterm',
+      10,
+      { pathPrefix: "src/file's directory/" },
+    )
+
+    // Every returned result (if any) must come from the quoted-directory prefix
+    for (const r of results) {
+      expect(r.chunk.path.startsWith("src/file's directory/")).toBe(true)
+    }
+  })
+
   it('upsert with empty array does nothing', async () => {
     await expect(store.upsert([])).resolves.toBeUndefined()
     const meta = await store.getMeta()
@@ -205,7 +266,7 @@ describe('LanceDBStore', () => {
   })
 })
 
-describe('ModelMismatchError', () => {
+describe.skipIf(!lancedbAvailable)('ModelMismatchError', () => {
   it('message contains both model names', () => {
     const error = new ModelMismatchError('bge-m3', 'nomic-embed-text')
     expect(error.message).toContain('bge-m3')

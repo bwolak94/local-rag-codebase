@@ -14,7 +14,7 @@ vi.mock('ollama', () => ({
 
 // ── Import SUT after mocks ───────────────────────────────────────────────────
 
-import { rerankWithLLM, crossEncoderRerank, rerank } from './rerank.js'
+import { rerankWithLLM, rerank } from './rerank.js'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -36,7 +36,7 @@ function makeChunk(id: string, path = 'src/a.ts', score = 0.5): ScoredChunk {
   }
 }
 
-function makeConfig(rerank: 'none' | 'llm' | 'cross-encoder' = 'none'): RagConfig {
+function makeConfig(rerank: 'none' | 'llm' = 'none'): RagConfig {
   return {
     root: '.',
     include: ['src/**'],
@@ -57,6 +57,8 @@ function makeConfig(rerank: 'none' | 'llm' | 'cross-encoder' = 'none'): RagConfi
       expandDepth: 1,
       rewrite: false,
       rerank,
+      rrfK: 60,
+      hydeTemperature: 0.0,
     },
     store: { driver: 'lancedb', path: '.rag' },
     budget: { contextFraction: 0.6, historyFraction: 0.2 },
@@ -162,24 +164,6 @@ describe('rerankWithLLM', () => {
   })
 })
 
-// ── crossEncoderRerank ───────────────────────────────────────────────────────
-
-describe('crossEncoderRerank', () => {
-  it('returns chunks unchanged (stub implementation)', async () => {
-    const chunks = [makeChunk('a', 'src/a.ts', 0.9), makeChunk('b', 'src/b.ts', 0.5)]
-
-    const result = await crossEncoderRerank('query', chunks)
-
-    expect(result).toEqual(chunks)
-    expect(result).toHaveLength(2)
-  })
-
-  it('returns empty array unchanged', async () => {
-    const result = await crossEncoderRerank('query', [])
-    expect(result).toEqual([])
-  })
-})
-
 // ── rerank ───────────────────────────────────────────────────────────────────
 
 describe('rerank', () => {
@@ -213,10 +197,5 @@ describe('rerank', () => {
     expect(result[1]?.chunk.id).toBe('b')
   })
 
-  it('throws when config.retrieval.rerank is "cross-encoder" (not yet implemented)', async () => {
-    const chunks = [makeChunk('a'), makeChunk('b')]
-    const config = makeConfig('cross-encoder')
-
-    await expect(rerank('query', chunks, config)).rejects.toThrow('cross-encoder reranking is not yet implemented')
-  })
+  // 'cross-encoder' removed from enum — no throw test needed
 })

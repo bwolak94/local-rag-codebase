@@ -3,16 +3,27 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+// Prevent native-binding crash when @lancedb/lancedb binary is missing.
+vi.mock('@lancedb/lancedb', async (importOriginal) => {
+  try { return await importOriginal() } catch { return {} }
+})
+
 // ---------------------------------------------------------------------------
 // Mock OllamaEmbedder — must be declared before any import of the module.
-// Query vectors are billingHigh (0.95) for "invoice", billingLow (0.85) for
-// "tax", and authLow (0.1) otherwise — ensuring deterministic L2 ranking.
+// Vectors use two orthogonal components so that cosine distance (used by
+// LanceDB) produces deterministic ranking: base=0.95 ≫ base=0.85 ≫ base=0.1.
 // ---------------------------------------------------------------------------
 vi.mock('../../src/embedding/ollama.js', () => {
   const DIM = 768
 
+  // i=0 carries `base`, i=1 carries `1-base` → different bases produce
+  // genuinely different angles, so cosine distance is non-trivially ordered.
   function makeVec(base: number): number[] {
-    return Array.from({ length: DIM }, (_, i) => (i === 0 ? base : base * 0.99))
+    return Array.from({ length: DIM }, (_, i) => {
+      if (i === 0) return base
+      if (i === 1) return 1 - base
+      return 0
+    })
   }
 
   return {
@@ -37,6 +48,12 @@ import { HybridRetriever } from '../../src/retrieval/hybrid.js'
 import { OllamaEmbedder } from '../../src/embedding/ollama.js'
 import type { EmbeddedChunk, SymbolDef, SymbolRef } from '../../src/types/index.js'
 
+let lancedbAvailable = false
+try {
+  const mod = await import('@lancedb/lancedb') as Record<string, unknown>
+  lancedbAvailable = typeof mod.connect === 'function'
+} catch { /* native binding not available — all tests will be skipped */ }
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -44,7 +61,11 @@ import type { EmbeddedChunk, SymbolDef, SymbolRef } from '../../src/types/index.
 const DIM = 768
 
 function makeVec(base: number): number[] {
-  return Array.from({ length: DIM }, (_, i) => (i === 0 ? base : base * 0.99))
+  return Array.from({ length: DIM }, (_, i) => {
+    if (i === 0) return base
+    if (i === 1) return 1 - base
+    return 0
+  })
 }
 
 function makeChunk(
@@ -165,7 +186,7 @@ afterAll(async () => {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('retrieval integration', () => {
+describe.skipIf(!lancedbAvailable)('retrieval integration', () => {
   it('vectorSearch for "invoice" returns billing/invoice.service.ts as top result', async () => {
     const embedder = new OllamaEmbedder('nomic-embed-text')
     const [qVec] = await embedder.embed(['invoice issue customer billing'], 'query')
@@ -179,12 +200,9 @@ describe('retrieval integration', () => {
   it('textSearch for "TaxCalculator" returns tax-calculator.ts chunk', async () => {
     const results = await store.textSearch('TaxCalculator', 5)
 
-    // LanceDB FTS requires the index to be explicitly created; when not present
-    // the store returns an empty array. Only assert content when results exist.
-    if (results.length > 0) {
-      const paths = results.map(r => r.chunk.path)
-      expect(paths).toContain('src/billing/tax-calculator.ts')
-    }
+    expect(results.length).toBeGreaterThan(0)
+    const paths = results.map(r => r.chunk.path)
+    expect(paths).toContain('src/billing/tax-calculator.ts')
   })
 
   it('vectorSearch with pathPrefix filter excludes auth/token.service.ts', async () => {
@@ -198,7 +216,7 @@ describe('retrieval integration', () => {
 
   it('HybridRetriever.retrieve with pathPrefix restricts to billing files', async () => {
     const embedder = new OllamaEmbedder('nomic-embed-text')
-    const retriever = new HybridRetriever(store, embedder, 10, 10, symbolIndex)
+    const retriever = new HybridRetriever(store, embedder, { kVector: 10, kFts: 10, symbolIndex })
 
     const results = await retriever.retrieve('invoice service', {
       k: 5,
@@ -216,11 +234,7 @@ describe('retrieval integration', () => {
     const retriever = new HybridRetriever(
       store,
       embedder,
-      10,
-      10,
-      symbolIndex,
-      /* expandMaxTokens */ 8192,
-      /* expandDepth */ 1,
+      { kVector: 10, kFts: 10, symbolIndex, expandMaxTokens: 8192, expandDepth: 1 },
     )
 
     const results = await retriever.retrieve('invoice issue', {

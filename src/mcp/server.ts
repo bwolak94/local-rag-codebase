@@ -27,7 +27,7 @@ export function createMCPServer(config: RagConfig, ctx: ToolContext): Server {
     },
     {
       name: 'grep',
-      description: 'ripgrep over indexed source files. Use for exact identifier or pattern searches.',
+      description: 'git grep over tracked source files. Use for exact identifier or pattern searches.',
       inputSchema: zodToJsonSchema(GrepInput),
     },
     {

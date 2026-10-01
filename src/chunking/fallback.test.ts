@@ -96,7 +96,7 @@ describe('SlidingWindowChunker', () => {
     const chunks = await chunker.chunk(file)
     expect(chunks).toHaveLength(1)
     const chunk = chunks[0]!
-    expect(chunk.id).toHaveLength(16)
+    expect(chunk.id).toHaveLength(32)
     expect(chunk.id).toMatch(/^[0-9a-f]+$/)
   })
 

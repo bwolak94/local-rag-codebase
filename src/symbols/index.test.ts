@@ -5,6 +5,14 @@ import { tmpdir } from 'node:os'
 import { SQLiteSymbolIndex } from './index.js'
 import type { SymbolDef, SymbolRef } from '../types/index.js'
 
+let sqliteAvailable = false
+try {
+  const { default: Database } = await import('better-sqlite3')
+  const db = new Database(':memory:')
+  db.close()
+  sqliteAvailable = true
+} catch { /* native binding not available — all tests will be skipped */ }
+
 function makeDef(overrides: Partial<SymbolDef> = {}): SymbolDef {
   return {
     name: 'myFn',
@@ -27,7 +35,7 @@ function makeRef(overrides: Partial<SymbolRef> = {}): SymbolRef {
   }
 }
 
-describe('SQLiteSymbolIndex', () => {
+describe.skipIf(!sqliteAvailable)('SQLiteSymbolIndex', () => {
   let tmpDir: string
   let idx: SQLiteSymbolIndex
 
@@ -166,10 +174,12 @@ describe('SQLiteSymbolIndex', () => {
     await idx.upsert([fnDef, classDef], [])
 
     const fnDefs = await idx.definitions('processData')
-    expect(fnDefs.length).toBeGreaterThanOrEqual(0)
+    expect(fnDefs.length).toBeGreaterThanOrEqual(1)
+    expect(fnDefs[0]?.name).toBe('processData')
 
     const classDefs = await idx.definitions('Builder')
-    expect(classDefs.length).toBeGreaterThanOrEqual(0)
+    expect(classDefs.length).toBeGreaterThanOrEqual(1)
+    expect(classDefs[0]?.name).toBe('Builder')
   })
 
   it('multiple refs to same symbol in different chunks are all stored', async () => {

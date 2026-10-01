@@ -4,7 +4,13 @@ import tsparser from '@typescript-eslint/parser'
 export default [
   {
     files: ['src/**/*.ts'],
-    languageOptions: { parser: tsparser },
+    languageOptions: {
+      parser: tsparser,
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: process.cwd(),
+      },
+    },
     plugins: { '@typescript-eslint': tseslint },
     rules: {
       '@typescript-eslint/no-floating-promises': 'error',

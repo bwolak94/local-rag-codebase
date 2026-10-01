@@ -7,6 +7,7 @@ import { ModelMismatchError } from './errors.js'
 export class SQLiteStore implements Store {
   private db: Database.Database
   private embedModel: string
+  private _warnedScale = false
 
   constructor(storePath: string, root: string, embedModel: string) {
     this.embedModel = embedModel
@@ -176,6 +177,12 @@ export class SQLiteStore implements Store {
     k: number,
     filter?: SearchFilter
   ): Promise<ScoredChunk[]> {
+    // NOTE: sqlite-vec is NOT yet integrated. This method performs a prototype-quality
+    // brute-force L2 scan in JavaScript over all stored embeddings. It loads every
+    // embedding row into memory, computes distances in a JS loop, then sorts.
+    // This is O(n) in both time and memory and is only suitable for small indexes.
+    // When sqlite-vec is integrated, replace this implementation with a native
+    // `vec_distance_L2` or `vec_distance_cosine` query against a vec0 virtual table.
     const meta = await this.getMeta()
     if (meta && meta.dim !== vector.length) {
       throw new ModelMismatchError(
@@ -188,6 +195,16 @@ export class SQLiteStore implements Store {
     const allVecs = this.db
       .prepare<[], VecRow>('SELECT chunk_id, embedding FROM chunks_vec')
       .all()
+
+    const rowCount = allVecs.length
+    if (!this._warnedScale && rowCount > 5000) {
+      this._warnedScale = true
+      console.warn(
+        `[SQLiteStore] WARNING: ${rowCount} chunks in index — SQLite vector search is a full-table scan. ` +
+        `Performance will degrade significantly beyond 5,000 chunks. ` +
+        `Switch to the LanceDB store driver for production use.`
+      )
+    }
 
     if (allVecs.length === 0) return []
 
@@ -244,9 +261,13 @@ export class SQLiteStore implements Store {
         .get(rowid)
       if (!chunk) continue
       if (!matchesFilter(chunk, filter)) continue
+      // SQLite FTS5 rank is negative (more negative = more relevant)
+      // Normalise to [0, 1]: take absolute value, clamp to reasonable max
+      const rawScore = Math.abs(Number(rank ?? 0))
+      const score = Math.min(1, rawScore / 10)
       results.push({
         chunk: rowToChunk(chunk),
-        score: -rank,
+        score,
         source: 'fts',
       })
     }

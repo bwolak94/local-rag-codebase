@@ -93,8 +93,7 @@ describe('RagConfigSchema', () => {
     const llm = RagConfigSchema.parse({ retrieval: { rerank: 'llm' } })
     expect(llm.retrieval.rerank).toBe('llm')
 
-    const crossEncoder = RagConfigSchema.parse({ retrieval: { rerank: 'cross-encoder' } })
-    expect(crossEncoder.retrieval.rerank).toBe('cross-encoder')
+    // 'cross-encoder' was removed from the enum (not yet implemented)
   })
 
   it('allows override of boolean values', () => {
