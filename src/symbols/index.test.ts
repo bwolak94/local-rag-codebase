@@ -166,10 +166,12 @@ describe('SQLiteSymbolIndex', () => {
     await idx.upsert([fnDef, classDef], [])
 
     const fnDefs = await idx.definitions('processData')
-    expect(fnDefs.length).toBeGreaterThanOrEqual(0)
+    expect(fnDefs.length).toBeGreaterThanOrEqual(1)
+    expect(fnDefs[0]?.name).toBe('processData')
 
     const classDefs = await idx.definitions('Builder')
-    expect(classDefs.length).toBeGreaterThanOrEqual(0)
+    expect(classDefs.length).toBeGreaterThanOrEqual(1)
+    expect(classDefs[0]?.name).toBe('Builder')
   })
 
   it('multiple refs to same symbol in different chunks are all stored', async () => {

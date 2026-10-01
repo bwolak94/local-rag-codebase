@@ -30,6 +30,11 @@ export class OllamaEmbedder implements Embedder {
     this.client = new Ollama({ host })
   }
 
+  async warmUp(): Promise<void> {
+    if (this._dim > 0) return
+    await this.embed([''], 'document')
+  }
+
   async embed(texts: string[], mode: 'document' | 'query'): Promise<number[][]> {
     const prefix = mode === 'query'
       ? (QUERY_PREFIXES[this.model] ?? '')

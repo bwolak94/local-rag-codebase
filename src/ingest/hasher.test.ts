@@ -18,9 +18,9 @@ describe('hasher', () => {
     expect(chunkHash('A', 'X')).not.toBe(chunkHash('B', 'X'))
   })
 
-  it('chunkId is 16 hex chars', () => {
+  it('chunkId is 32 hex chars', () => {
     const id = chunkId('src/foo.ts', 'myFn', 10)
-    expect(id).toHaveLength(16)
+    expect(id).toHaveLength(32)
     expect(id).toMatch(/^[0-9a-f]+$/)
   })
 
@@ -40,7 +40,7 @@ describe('hasher', () => {
     expect(contentHash('')).toBe(hash) // deterministic
   })
 
-  it('chunkId produces exactly 16 hex characters', () => {
-    expect(chunkId('src/a.ts', undefined, 0)).toMatch(/^[a-f0-9]{16}$/)
+  it('chunkId produces exactly 32 hex characters', () => {
+    expect(chunkId('src/a.ts', undefined, 0)).toMatch(/^[a-f0-9]{32}$/)
   })
 })

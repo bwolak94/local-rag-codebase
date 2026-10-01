@@ -179,12 +179,9 @@ describe('retrieval integration', () => {
   it('textSearch for "TaxCalculator" returns tax-calculator.ts chunk', async () => {
     const results = await store.textSearch('TaxCalculator', 5)
 
-    // LanceDB FTS requires the index to be explicitly created; when not present
-    // the store returns an empty array. Only assert content when results exist.
-    if (results.length > 0) {
-      const paths = results.map(r => r.chunk.path)
-      expect(paths).toContain('src/billing/tax-calculator.ts')
-    }
+    expect(results.length).toBeGreaterThan(0)
+    const paths = results.map(r => r.chunk.path)
+    expect(paths).toContain('src/billing/tax-calculator.ts')
   })
 
   it('vectorSearch with pathPrefix filter excludes auth/token.service.ts', async () => {

@@ -12,6 +12,7 @@ await Promise.all([
   import('./watch.js').then(m => m.register(program)),
   import('./serve-mcp.js').then(m => m.register(program)),
   import('./chat.js').then(m => m.register(program)),
+  import('./eval.js').then(m => m.register(program)),
 ])
 
 program.parseAsync(process.argv).catch(err => {

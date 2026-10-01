@@ -191,6 +191,56 @@ describe('LanceDBStore', () => {
     expect(results).toHaveLength(0)
   })
 
+  it("vectorSearch with single-quote in pathPrefix does not throw", async () => {
+    const chunkInQuotedDir = makeEmbeddedChunk('chunk-sq-vec', {
+      path: "src/file's directory/a.ts",
+    })
+    const chunkOther = makeEmbeddedChunk('chunk-sq-vec-other', {
+      path: 'src/other/b.ts',
+    })
+    await store.upsert([chunkInQuotedDir, chunkOther])
+
+    let results: Awaited<ReturnType<typeof store.vectorSearch>>
+    await expect(async () => {
+      results = await store.vectorSearch(
+        [0.1, 0.2, 0.3, 0.4],
+        10,
+        { pathPrefix: "src/file's directory/" },
+      )
+    }).not.toThrow()
+
+    // Every returned result must come from the quoted-directory prefix
+    for (const r of results!) {
+      expect(r.chunk.path.startsWith("src/file's directory/")).toBe(true)
+    }
+  })
+
+  it("textSearch with single-quote in pathPrefix does not throw", async () => {
+    const chunkInQuotedDir = makeEmbeddedChunk('chunk-sq-fts', {
+      path: "src/file's directory/a.ts",
+      content: 'uniqueterm',
+    })
+    const chunkOther = makeEmbeddedChunk('chunk-sq-fts-other', {
+      path: 'src/other/b.ts',
+      content: 'uniqueterm',
+    })
+    await store.upsert([chunkInQuotedDir, chunkOther])
+
+    let results: Awaited<ReturnType<typeof store.textSearch>>
+    await expect(async () => {
+      results = await store.textSearch(
+        'uniqueterm',
+        10,
+        { pathPrefix: "src/file's directory/" },
+      )
+    }).not.toThrow()
+
+    // Every returned result (if any) must come from the quoted-directory prefix
+    for (const r of results!) {
+      expect(r.chunk.path.startsWith("src/file's directory/")).toBe(true)
+    }
+  })
+
   it('upsert with empty array does nothing', async () => {
     await expect(store.upsert([])).resolves.toBeUndefined()
     const meta = await store.getMeta()

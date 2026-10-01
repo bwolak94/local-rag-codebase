@@ -12,5 +12,7 @@ export function chunkHash(header: string, content: string): string {
 
 export function chunkId(path: string, symbol: string | undefined, startLine: number): string {
   const key = `${path}|${symbol ?? ''}|${startLine}`
-  return createHash('sha256').update(key).digest('hex').slice(0, 16)
+  // 32 hex chars = 128-bit collision space (birthday probability negligible at 1M chunks)
+  // Note: changing this constant invalidates all existing chunk IDs in the index
+  return createHash('sha256').update(key).digest('hex').slice(0, 32)
 }

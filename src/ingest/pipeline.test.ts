@@ -1,17 +1,41 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { IndexPipeline } from './pipeline.js'
-import { ModelMismatchError } from '../store/lancedb.js'
+import { ModelMismatchError } from '../store/errors.js'
 import type { Store, Embedder, SourceFile, Chunk } from '../types/index.js'
 import type { RagConfig } from '../config/schema.js'
 import { tmpdir } from 'node:os'
 import { mkdtempSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
-import Database from 'better-sqlite3'
-import { resolve } from 'node:path'
+import { join, resolve } from 'node:path'
+
+// ---------------------------------------------------------------------------
+// Check whether the better-sqlite3 native binding is available.
+// IndexPipeline uses it internally for file-hash tracking.
+// ---------------------------------------------------------------------------
+let sqliteAvailable = false
+try {
+  const { default: Database } = await import('better-sqlite3')
+  const db = new Database(':memory:')
+  db.close()
+  sqliteAvailable = true
+} catch {
+  /* native binding not available — all tests in this file will be skipped */
+}
 
 // Mock the walker so tests do not require a real git repo
 vi.mock('./walker.js', () => ({
   collectFiles: vi.fn().mockResolvedValue([] as SourceFile[]),
+}))
+
+// Hoisted mock for SlidingWindowChunker — configured per-test via mockImplementation
+const { mockSlidingWindowImpl } = vi.hoisted(() => ({
+  mockSlidingWindowImpl: vi.fn().mockImplementation(() => ({
+    supports: () => true,
+    chunk: vi.fn().mockResolvedValue([]),
+  })),
+}))
+
+vi.mock('../chunking/fallback.js', () => ({
+  SlidingWindowChunker: mockSlidingWindowImpl,
 }))
 
 // mock store
@@ -47,7 +71,7 @@ function testConfig(root: string): RagConfig {
   }
 }
 
-describe('IndexPipeline', () => {
+describe.skipIf(!sqliteAvailable)('IndexPipeline', () => {
   let tmpDir: string
 
   beforeEach(() => {
@@ -208,8 +232,18 @@ describe('IndexPipeline', () => {
     }
     mockedCollect.mockResolvedValueOnce([fakeFile])
 
-    // Stub embedder to return fewer vectors than chunks
-    // Assume the chunker will produce 2+ chunks, but embedder returns only 1 vector
+    // Configure the fallback chunker to return exactly 2 chunks regardless of content,
+    // so the test does not depend on SlidingWindowChunker's real chunking behaviour.
+    const twoChunks: Chunk[] = [
+      { id: 'chunk-a', path: fakeFile.path, lang: 'typescript', kind: 'chunk', startLine: 1, endLine: 1, header: 'h1', content: 'export const x = 1', hash: 'ha' },
+      { id: 'chunk-b', path: fakeFile.path, lang: 'typescript', kind: 'chunk', startLine: 2, endLine: 2, header: 'h2', content: 'export const y = 2', hash: 'hb' },
+    ]
+    mockSlidingWindowImpl.mockImplementationOnce(() => ({
+      supports: () => true,
+      chunk: vi.fn().mockResolvedValue(twoChunks),
+    }))
+
+    // Stub embedder to return only 1 vector — mismatch with 2 chunks triggers the error
     vi.mocked(embedder.embed).mockResolvedValueOnce([[0.1, 0.2, 0.3, 0.4]])
 
     const pipeline = new IndexPipeline(config, store, embedder)
@@ -220,7 +254,7 @@ describe('IndexPipeline', () => {
     mockedCollect.mockResolvedValueOnce([])
   })
 
-  it('run() creates chunk_hashes table', () => {
+  it('run() creates chunk_hashes table', async () => {
     const store = mockStore()
     const embedder = mockEmbedder()
     const config = testConfig(tmpDir)
@@ -229,6 +263,7 @@ describe('IndexPipeline', () => {
     // Verify the chunk_hashes table was created in the SQLite db
     const dbPath = resolve(tmpDir, '.rag-test', 'files.db')
     expect(existsSync(dbPath)).toBe(true)
+    const { default: Database } = await import('better-sqlite3')
     const db = new Database(dbPath)
     const tables = db.prepare(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='chunk_hashes'"
