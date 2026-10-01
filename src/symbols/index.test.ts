@@ -5,6 +5,14 @@ import { tmpdir } from 'node:os'
 import { SQLiteSymbolIndex } from './index.js'
 import type { SymbolDef, SymbolRef } from '../types/index.js'
 
+let sqliteAvailable = false
+try {
+  const { default: Database } = await import('better-sqlite3')
+  const db = new Database(':memory:')
+  db.close()
+  sqliteAvailable = true
+} catch { /* native binding not available — all tests will be skipped */ }
+
 function makeDef(overrides: Partial<SymbolDef> = {}): SymbolDef {
   return {
     name: 'myFn',
@@ -27,7 +35,7 @@ function makeRef(overrides: Partial<SymbolRef> = {}): SymbolRef {
   }
 }
 
-describe('SQLiteSymbolIndex', () => {
+describe.skipIf(!sqliteAvailable)('SQLiteSymbolIndex', () => {
   let tmpDir: string
   let idx: SQLiteSymbolIndex
 

@@ -6,6 +6,14 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import type { EmbeddedChunk } from '../types/index.js'
 
+let sqliteAvailable = false
+try {
+  const { default: Database } = await import('better-sqlite3')
+  const db = new Database(':memory:')
+  db.close()
+  sqliteAvailable = true
+} catch { /* native binding not available — all tests will be skipped */ }
+
 function makeChunk(id: string, overrides: Partial<EmbeddedChunk> = {}): EmbeddedChunk {
   return {
     id,
@@ -22,7 +30,7 @@ function makeChunk(id: string, overrides: Partial<EmbeddedChunk> = {}): Embedded
   }
 }
 
-describe('SQLiteStore', () => {
+describe.skipIf(!sqliteAvailable)('SQLiteStore', () => {
   let tmpDir: string
   let store: SQLiteStore
 

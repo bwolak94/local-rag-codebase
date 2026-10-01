@@ -1,4 +1,12 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+
+// run.js imports LanceDBStore which loads the lancedb native binary.
+// Since these tests only exercise pure metric functions, stub the store out.
+vi.mock('../src/store/lancedb.js', () => ({
+  LanceDBStore: class {},
+  ModelMismatchError: class extends Error {},
+}))
+
 import { computeRecallAtK, computeTagBreakdown } from './run.js'
 import type { Question, EvalDetail } from './run.js'
 

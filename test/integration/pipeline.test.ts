@@ -4,6 +4,11 @@ import { tmpdir } from 'node:os'
 import { join, resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+// Prevent native-binding crash when @lancedb/lancedb binary is missing.
+vi.mock('@lancedb/lancedb', async (importOriginal) => {
+  try { return await importOriginal() } catch { return {} }
+})
+
 // ---------------------------------------------------------------------------
 // Mock OllamaEmbedder before any imports that transitively load it.
 // Returns 768-dim zero vectors (nomic-embed-text dimensionality).
@@ -26,6 +31,12 @@ import { TreeSitterChunker } from '../../src/chunking/treesitter.js'
 import { OllamaEmbedder } from '../../src/embedding/ollama.js'
 import { LanceDBStore } from '../../src/store/lancedb.js'
 import type { EmbeddedChunk } from '../../src/types/index.js'
+
+let lancedbAvailable = false
+try {
+  const mod = await import('@lancedb/lancedb') as Record<string, unknown>
+  lancedbAvailable = typeof mod.connect === 'function'
+} catch { /* native binding not available — all tests will be skipped */ }
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 // The project root is two levels up from test/integration/
@@ -55,7 +66,7 @@ afterAll(async () => {
   await rm(tmpDir, { recursive: true, force: true })
 })
 
-describe('ingest pipeline integration', () => {
+describe.skipIf(!lancedbAvailable)('ingest pipeline integration', () => {
   it('collectFiles returns all three fixture TypeScript files', async () => {
     const files = await collectFiles(REPO_ROOT, FIXTURE_INCLUDE, [], 200_000)
     const paths = files.map(f => f.path)
