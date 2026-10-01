@@ -1,13 +1,9 @@
 import * as lancedb from '@lancedb/lancedb'
 import { resolve } from 'node:path'
 import type { EmbeddedChunk, ScoredChunk, SearchFilter, Store } from '../types/index.js'
+import { ModelMismatchError } from './errors.js'
 
-export class ModelMismatchError extends Error {
-  constructor(stored: string, current: string) {
-    super(`Embedding model mismatch: index was built with "${stored}", current model is "${current}". Run \`rag index --full\` to rebuild.`)
-    this.name = 'ModelMismatchError'
-  }
-}
+export { ModelMismatchError }
 
 const META_TABLE = 'index_meta'
 const CHUNKS_TABLE = 'chunks'

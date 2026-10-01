@@ -1,7 +1,7 @@
 import { Command } from 'commander'
 import { loadConfig } from '../config/loader.js'
 import { OllamaEmbedder } from '../embedding/ollama.js'
-import { LanceDBStore } from '../store/lancedb.js'
+import { createStore } from '../store/factory.js'
 import { HybridRetriever } from '../retrieval/hybrid.js'
 import { OllamaGenerator } from '../generation/chat.js'
 import { SQLiteSymbolIndex } from '../symbols/index.js'
@@ -21,7 +21,7 @@ export function register(program: Command) {
     .action(async (question: string, opts) => {
       const config = loadConfig({}, opts.config)
       const embedder = new OllamaEmbedder(config.embedding.model, config.embedding.batchSize)
-      const store = new LanceDBStore(config.store.path, config.root, config.embedding.model)
+      const store = createStore(config)
       const symbolIndex = new SQLiteSymbolIndex(config.store.path, config.root)
 
       const { contextTokens } = allocateBudget(
