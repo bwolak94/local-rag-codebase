@@ -1,0 +1,6 @@
+{
+  "name": "sample-repo",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Minimal TypeScript fixture for RAG integration tests"
+}
