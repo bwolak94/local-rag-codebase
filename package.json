@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@lancedb/lancedb": "^0.39.0",
+    "@lancedb/lancedb-darwin-x64": "^0.22.3",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "better-sqlite3": "^12.11.1",
     "chokidar": "^3.6.0",
