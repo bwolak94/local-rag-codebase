@@ -14,10 +14,6 @@
     "lint": "eslint src --max-warnings 0",
     "format": "prettier --write src eval"
   },
-  "optionalDependencies": {
-    "@lancedb/lancedb-darwin-x64": "^0.22.3",
-    "@lancedb/lancedb-linux-x64-gnu": "^0.22.3"
-  },
   "dependencies": {
     "@lancedb/lancedb": "^0.39.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
