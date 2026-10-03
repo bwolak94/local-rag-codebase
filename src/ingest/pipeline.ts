@@ -157,6 +157,16 @@ export class IndexPipeline {
     let added = 0
     let totalChunks = 0
 
+    // First pass: chunk all changed files and collect texts for batch embedding.
+    interface PendingFile {
+      file: SourceFile
+      chunks: Awaited<ReturnType<typeof tsChunker.chunk>>
+      texts: string[]
+      offset: number
+    }
+    const pending: PendingFile[] = []
+    let allTexts: string[] = []
+
     for (const file of targetFiles) {
       const existing = this.getRecord(file.path)
       if (existing && existing.hash === file.hash && !opts.full) continue
@@ -199,7 +209,22 @@ export class IndexPipeline {
       }
 
       const texts = chunks.map(c => c.header + '\n' + c.content)
-      const vectors = await this.embedder.embed(texts, 'document')
+      pending.push({ file, chunks, texts, offset: allTexts.length })
+      allTexts = allTexts.concat(texts)
+    }
+
+    // Batch embed all texts in a single Ollama round-trip.
+    let allVectors: number[][] = []
+    if (allTexts.length > 0) {
+      allVectors = await this.embedder.embed(allTexts, 'document')
+      if (allVectors.length !== allTexts.length) {
+        throw new Error(`Embedder returned ${allVectors.length} vectors for ${allTexts.length} total texts`)
+      }
+    }
+
+    // Second pass: slice embeddings back per file, upsert, and extract symbols.
+    for (const { file, chunks, texts, offset } of pending) {
+      const vectors = allVectors.slice(offset, offset + texts.length)
 
       if (vectors.length !== chunks.length) {
         throw new Error(`Embedder returned ${vectors.length} vectors for ${chunks.length} chunks in ${file.path}`)
