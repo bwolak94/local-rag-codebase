@@ -22,11 +22,23 @@ export const RagConfigSchema = z.object({
   embedding: z.object({
     model: z.string().default('nomic-embed-text'),
     batchSize: z.number().default(48),
-    host: z.string().default('http://localhost:11434'),
+    host: z.string()
+      .url({ message: 'host must be a valid URL' })
+      .refine(
+        (v) => v.startsWith('http://') || v.startsWith('https://'),
+        { message: 'host must use http:// or https:// scheme' }
+      )
+      .default('http://localhost:11434'),
   }).default({}),
   llm: z.object({
     model: z.string().default('qwen2.5-coder:14b'),
-    host: z.string().default('http://localhost:11434'),
+    host: z.string()
+      .url({ message: 'host must be a valid URL' })
+      .refine(
+        (v) => v.startsWith('http://') || v.startsWith('https://'),
+        { message: 'host must use http:// or https:// scheme' }
+      )
+      .default('http://localhost:11434'),
     numCtx: z.number().default(32768),
     temperature: z.number().default(0.1),
     rewriteTemperature: z.number().default(0.3),

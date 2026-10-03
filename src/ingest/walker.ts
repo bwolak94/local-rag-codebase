@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process'
-import { readFileSync, statSync, existsSync } from 'node:fs'
+import { readFileSync, statSync, existsSync, lstatSync, realpathSync } from 'node:fs'
 import { resolve, extname } from 'node:path'
 import ignore from 'ignore'
 import { minimatch } from 'minimatch'
@@ -15,8 +15,8 @@ const LANG_MAP: Record<string, string> = {
 }
 
 const SECRET_PATTERNS = [
-  /\.env($|\.)/, /\.pem$/, /\.key$/, /\.p12$/, /\.pfx$/,
-  /\/(id_rsa|id_ed25519|id_ecdsa|id_dsa)$/, /\.secret$/,
+  /\.env($|\.)/i, /\.envrc$/i, /\.pem$/i, /\.key$/i, /\.p12$/i, /\.pfx$/i,
+  /\/(id_rsa|id_ed25519|id_ecdsa|id_dsa)$/i, /\.secret$/i,
 ]
 
 export function detectLang(path: string): string {
@@ -56,6 +56,11 @@ export async function collectFiles(
 
     const abs = resolve(root, rel)
     if (!existsSync(abs)) continue
+
+    if (lstatSync(abs).isSymbolicLink()) {
+      const real = realpathSync(abs)
+      if (SECRET_PATTERNS.some(p => p.test(real))) continue
+    }
 
     const stat = statSync(abs)
     if (stat.size > maxFileBytes) continue
