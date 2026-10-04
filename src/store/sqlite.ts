@@ -216,17 +216,21 @@ export class SQLiteStore implements Store {
 
     scored.sort((a, b) => a.dist - b.dist)
 
-    const results: ScoredChunk[] = []
+    const topKIds: string[] = []
+    const scoreMap = new Map<string, number>()
     for (const { chunk_id, dist } of scored) {
-      if (results.length >= k) break
-      const chunk = this.db
-        .prepare<[string], ChunkRow>('SELECT * FROM chunks WHERE id = ?')
-        .get(chunk_id)
-      if (!chunk) continue
-      if (!matchesFilter(chunk, filter)) continue
+      if (topKIds.length >= k) break
+      topKIds.push(chunk_id)
+      scoreMap.set(chunk_id, 1 / (1 + dist))
+    }
+
+    const fetched = await this.getByIds(topKIds)
+    const results: ScoredChunk[] = []
+    for (const item of fetched) {
+      if (!matchesFilter(item.chunk as unknown as ChunkRow, filter)) continue
       results.push({
-        chunk: rowToChunk(chunk),
-        score: 1 / (1 + dist),
+        chunk: item.chunk,
+        score: scoreMap.get(item.chunk.id) ?? 0,
         source: 'vector',
       })
     }
@@ -239,6 +243,7 @@ export class SQLiteStore implements Store {
     k: number,
     filter?: SearchFilter
   ): Promise<ScoredChunk[]> {
+    const safeQuery = query.slice(0, 512)
     type FtsRow = { rowid: number; rank: number }
     let ftsRows: FtsRow[]
     try {
@@ -246,28 +251,40 @@ export class SQLiteStore implements Store {
         .prepare<[string], FtsRow>(
           'SELECT rowid, rank FROM chunks_fts WHERE chunks_fts MATCH ? ORDER BY rank'
         )
-        .all(query)
+        .all(safeQuery)
     } catch {
       return []
     }
 
     if (ftsRows.length === 0) return []
 
-    const results: ScoredChunk[] = []
+    const rowidScoreMap = new Map<number, number>()
     for (const { rowid, rank } of ftsRows) {
-      if (results.length >= k) break
-      const chunk = this.db
-        .prepare<[number], ChunkRow>('SELECT * FROM chunks WHERE rowid = ?')
-        .get(rowid)
-      if (!chunk) continue
-      if (!matchesFilter(chunk, filter)) continue
-      // SQLite FTS5 rank is negative (more negative = more relevant)
-      // Normalise to [0, 1]: take absolute value, clamp to reasonable max
       const rawScore = Math.abs(Number(rank ?? 0))
-      const score = Math.min(1, rawScore / 10)
+      rowidScoreMap.set(rowid, Math.min(1, rawScore / 10))
+    }
+
+    const rowidToId = this.db
+      .prepare<number[], { rowid: number; id: string }>(
+        `SELECT rowid, id FROM chunks WHERE rowid IN (${ftsRows.map(() => '?').join(',')})`
+      )
+      .all(...ftsRows.map(r => r.rowid))
+
+    const idScoreMap = new Map<string, number>()
+    for (const row of rowidToId) {
+      idScoreMap.set(row.id, rowidScoreMap.get(row.rowid) ?? 0)
+    }
+
+    const ids = rowidToId.map(r => r.id)
+    const fetched = await this.getByIds(ids)
+
+    const results: ScoredChunk[] = []
+    for (const item of fetched) {
+      if (results.length >= k) break
+      if (!matchesFilter(item.chunk as unknown as ChunkRow, filter)) continue
       results.push({
-        chunk: rowToChunk(chunk),
-        score,
+        chunk: item.chunk,
+        score: idScoreMap.get(item.chunk.id) ?? 0,
         source: 'fts',
       })
     }

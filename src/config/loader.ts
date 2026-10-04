@@ -1,5 +1,5 @@
 import { readFileSync, existsSync } from 'node:fs'
-import { resolve, dirname, isAbsolute } from 'node:path'
+import { resolve, dirname, isAbsolute, sep } from 'node:path'
 import { RagConfigSchema, type RagConfig } from './schema.js'
 
 export function findConfigFile(start = process.cwd()): string | null {
@@ -32,5 +32,11 @@ export function loadConfig(overrides: Partial<RagConfig> = {}, configPath?: stri
   if (typeof resolvedOverrides.root === 'string' && !isAbsolute(resolvedOverrides.root)) {
     resolvedOverrides.root = resolve(process.cwd(), resolvedOverrides.root)
   }
-  return RagConfigSchema.parse({ ...raw, ...resolvedOverrides })
+  const config = RagConfigSchema.parse({ ...raw, ...resolvedOverrides })
+  const configBase = resolve(file ? dirname(file) : process.cwd())
+  const resolvedRoot = resolve(configBase, config.root)
+  if (!resolvedRoot.startsWith(configBase + sep) && resolvedRoot !== configBase) {
+    throw new Error(`Config 'root' (${resolvedRoot}) must be within the config directory (${configBase})`)
+  }
+  return config
 }
