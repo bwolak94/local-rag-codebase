@@ -235,6 +235,7 @@ export class SQLiteStore implements Store {
       })
     }
 
+    results.sort((a, b) => b.score - a.score)
     return results
   }
 
