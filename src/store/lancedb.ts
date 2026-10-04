@@ -4,6 +4,10 @@ import { resolve } from 'node:path'
 import type { EmbeddedChunk, ScoredChunk, SearchFilter, Store } from '../types/index.js'
 import { ModelMismatchError } from './errors.js'
 
+function escapeLike(raw: string): string {
+  return raw.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
+}
+
 export { ModelMismatchError }
 
 const META_TABLE = 'index_meta'
@@ -13,6 +17,7 @@ export class LanceDBStore implements Store {
   private dbPath: string
   private db: lancedb.Connection | null = null
   private metaChecked = false
+  private _tableNamesCache: Set<string> | null = null
 
   constructor(storePath: string, root: string, private embedModel: string) {
     this.dbPath = resolve(root, storePath)
@@ -25,11 +30,21 @@ export class LanceDBStore implements Store {
     return this.db
   }
 
+  private async tableExists(name: string): Promise<boolean> {
+    if (!this._tableNamesCache) {
+      this._tableNamesCache = new Set(await this.db!.tableNames())
+    }
+    return this._tableNamesCache.has(name)
+  }
+
+  private invalidateTableCache(): void {
+    this._tableNamesCache = null
+  }
+
   async getMeta(): Promise<{ embedModel: string; dim: number } | null> {
     try {
       const db = await this.connect()
-      const names = await db.tableNames()
-      if (!names.includes(META_TABLE)) return null
+      if (!await this.tableExists(META_TABLE)) return null
       const tbl = await db.openTable(META_TABLE)
       const rows = await tbl.query().limit(1).toArray()
       if (!rows[0]) return null
@@ -54,17 +69,17 @@ export class LanceDBStore implements Store {
 
   private async setMeta(embedModel: string, dim: number): Promise<void> {
     const db = await this.connect()
-    const names = await db.tableNames()
-    if (names.includes(META_TABLE)) {
+    if (await this.tableExists(META_TABLE)) {
       await db.dropTable(META_TABLE)
+      this.invalidateTableCache()
     }
     await db.createTable(META_TABLE, [{ embedModel, dim }])
+    this.invalidateTableCache()
   }
 
   async upsert(chunks: EmbeddedChunk[]): Promise<void> {
     if (chunks.length === 0) return
     const db = await this.connect()
-    const names = await db.tableNames()
 
     const rows = chunks.map(c => ({
       id: c.id,
@@ -80,8 +95,9 @@ export class LanceDBStore implements Store {
       vector: c.vector,
     }))
 
-    if (!names.includes(CHUNKS_TABLE)) {
+    if (!await this.tableExists(CHUNKS_TABLE)) {
       const tbl = await db.createTable(CHUNKS_TABLE, rows)
+      this.invalidateTableCache()
       await tbl.createIndex('content', { config: Index.fts(), replace: true })
       await tbl.createIndex('header', { config: Index.fts(), replace: true })
     } else {
@@ -107,8 +123,7 @@ export class LanceDBStore implements Store {
   async deleteByPath(path: string): Promise<void> {
     try {
       const db = await this.connect()
-      const names = await db.tableNames()
-      if (!names.includes(CHUNKS_TABLE)) return
+      if (!await this.tableExists(CHUNKS_TABLE)) return
       const tbl = await db.openTable(CHUNKS_TABLE)
       await tbl.delete(`path = '${path.replace(/'/g, "''")}'`)
     } catch {
@@ -120,8 +135,7 @@ export class LanceDBStore implements Store {
     if (ids.length === 0) return
     try {
       const db = await this.connect()
-      const names = await db.tableNames()
-      if (!names.includes(CHUNKS_TABLE)) return
+      if (!await this.tableExists(CHUNKS_TABLE)) return
       const tbl = await db.openTable(CHUNKS_TABLE)
       const escaped = ids.map(id => `'${id.replace(/'/g, "''")}'`).join(', ')
       await tbl.delete(`id IN (${escaped})`)
@@ -134,13 +148,12 @@ export class LanceDBStore implements Store {
     await this.checkMeta(this.embedModel, vector.length)
     try {
       const db = await this.connect()
-      const names = await db.tableNames()
-      if (!names.includes(CHUNKS_TABLE)) return []
+      if (!await this.tableExists(CHUNKS_TABLE)) return []
       const tbl = await db.openTable(CHUNKS_TABLE)
       let q = tbl.vectorSearch(vector).distanceType('cosine').limit(k)
       if (filter?.pathPrefix) {
-        const safePrefix = filter.pathPrefix.replace(/'/g, "''")
-        q = q.where(`path LIKE '${safePrefix}%'`)
+        const safePrefix = escapeLike(filter.pathPrefix.replace(/'/g, "''"))
+        q = q.where(`path LIKE '${safePrefix}%' ESCAPE '\\'`)
       }
       if (filter?.lang && filter.lang.length > 0) {
         const langs = filter.lang.map(l => `'${l.replace(/'/g, "''")}'`).join(', ')
@@ -162,16 +175,16 @@ export class LanceDBStore implements Store {
   }
 
   async textSearch(query: string, k: number, filter?: SearchFilter): Promise<ScoredChunk[]> {
+    const safeQuery = query.slice(0, 512)
     await this.checkMeta(this.embedModel, 0)
     try {
       const db = await this.connect()
-      const names = await db.tableNames()
-      if (!names.includes(CHUNKS_TABLE)) return []
+      if (!await this.tableExists(CHUNKS_TABLE)) return []
       const tbl = await db.openTable(CHUNKS_TABLE)
-      let q = tbl.search(query).limit(k)
+      let q = tbl.search(safeQuery).limit(k)
       if (filter?.pathPrefix) {
-        const safePrefix = filter.pathPrefix.replace(/'/g, "''")
-        q = q.where(`path LIKE '${safePrefix}%'`)
+        const safePrefix = escapeLike(filter.pathPrefix.replace(/'/g, "''"))
+        q = q.where(`path LIKE '${safePrefix}%' ESCAPE '\\'`)
       }
       if (filter?.lang && filter.lang.length > 0) {
         const langs = filter.lang.map(l => `'${l.replace(/'/g, "''")}'`).join(', ')
@@ -196,8 +209,7 @@ export class LanceDBStore implements Store {
     if (ids.length === 0) return []
     try {
       const db = await this.connect()
-      const names = await db.tableNames()
-      if (!names.includes(CHUNKS_TABLE)) return []
+      if (!await this.tableExists(CHUNKS_TABLE)) return []
       const tbl = await db.openTable(CHUNKS_TABLE)
       const escaped = ids.map(id => `'${id.replace(/'/g, "''")}'`).join(', ')
       const rows = await tbl.query().where(`id IN (${escaped})`).toArray()

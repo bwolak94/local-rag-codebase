@@ -184,7 +184,7 @@ describe('createMCPServer', () => {
 
     const result = response as { content: Array<{ type: string; text: string }>; isError?: boolean }
     expect(result.isError).toBe(true)
-    expect(result.content[0]?.text).toContain('Unknown tool: nonexistent_tool')
+    expect(result.content[0]?.text).toContain('Tool execution failed')
   })
 
   it('Zod validation error in tool args returns isError response', async () => {
@@ -199,6 +199,6 @@ describe('createMCPServer', () => {
 
     const result = response as { content: Array<{ type: string; text: string }>; isError?: boolean }
     expect(result.isError).toBe(true)
-    expect(result.content[0]?.text).toContain('Error:')
+    expect(result.content[0]?.text).toContain('Tool execution failed')
   })
 })

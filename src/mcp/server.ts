@@ -82,9 +82,9 @@ export function createMCPServer(config: RagConfig, ctx: ToolContext): Server {
       }
       return { content: [{ type: 'text', text: result }] }
     } catch (err) {
-      console.error(`[mcp] tool ${name} error:`, err)
+      console.error('[mcp] tool error:', err)
       return {
-        content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+        content: [{ type: 'text', text: 'Tool execution failed. Check server logs for details.' }],
         isError: true,
       }
     }

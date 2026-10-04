@@ -32,5 +32,6 @@ export function loadConfig(overrides: Partial<RagConfig> = {}, configPath?: stri
   if (typeof resolvedOverrides.root === 'string' && !isAbsolute(resolvedOverrides.root)) {
     resolvedOverrides.root = resolve(process.cwd(), resolvedOverrides.root)
   }
-  return RagConfigSchema.parse({ ...raw, ...resolvedOverrides })
+  const config = RagConfigSchema.parse({ ...raw, ...resolvedOverrides })
+  return config
 }
