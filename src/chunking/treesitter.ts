@@ -29,6 +29,7 @@ const QUERIES: Record<string, string> = {
 
 let parserInitialized = false
 const parsers = new Map<string, Parser>()
+const compiledQueries = new Map<string, unknown>()
 
 export async function getParser(lang: string): Promise<Parser | null> {
   if (!SUPPORTED_LANGS.has(lang)) return null
@@ -180,7 +181,10 @@ export class TreeSitterChunker implements Chunker {
     const language = parser.getLanguage()
     let query: Parser.Query
     try {
-      query = language.query(queryStr)
+      if (!compiledQueries.has(file.lang)) {
+        compiledQueries.set(file.lang, language.query(queryStr))
+      }
+      query = compiledQueries.get(file.lang)! as Parser.Query
     } catch {
       return fallback.chunk(file)
     }
